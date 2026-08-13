@@ -1,9 +1,29 @@
 {
-  "password": "change-me",
+  "users": [
+    {
+      "username": "admin",
+      "name": "Quản trị viên",
+      "role": "admin",
+      "password": "change-me"
+    },
+    {
+      "username": "vanhanh",
+      "name": "Nhân viên vận hành",
+      "role": "operator",
+      "password": "change-me"
+    },
+    {
+      "username": "xem",
+      "name": "Khách xem",
+      "role": "viewer",
+      "password": "change-me"
+    }
+  ],
   "cameras": [
     {
       "id": "cam",
       "name": "Sân trước",
+      "group": "Khu vực chính",
       "enabled": true,
       "autoConnect": true,
       "path": "cam",
@@ -12,6 +32,7 @@
     {
       "id": "kho",
       "name": "Kho gas",
+      "group": "Kho",
       "enabled": true,
       "autoConnect": true,
       "path": "kho",

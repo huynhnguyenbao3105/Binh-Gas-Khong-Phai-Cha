@@ -1,81 +1,462 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="vi">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Giám sát bình gas</title>
-    <link rel="stylesheet" href="style.css">
-    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap" rel="stylesheet">
-</head>
-<body>
-    <div class="app">
-        <header class="topbar">
-            <div class="brand">
-                <span class="brand-mark">G</span>
-                <div>
-                    <h1>Giám sát gas</h1>
-                    <p id="status-text" class="status-safe">Chưa phát hiện bình gas</p>
-                </div>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Live Monitoring</title>
+    <link rel="stylesheet" href="style.css" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <div class="shell">
+      <nav class="nav-rail" aria-label="Điều hướng">
+        <div class="nav-logo" title="Giám sát gas">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path
+              d="M4 14c3.2-1.4 5.2-4.2 6.2-7.6.4 2.4 1.6 4.4 3.6 5.8 1.4.9 2.2 2.2 2.2 3.8A6 6 0 0 1 10 22C6.7 22 4 19.3 4 16c0-.7.1-1.4.3-2Z"
+              fill="currentColor"
+            />
+            <path
+              d="M14.5 6.2c.6 1.8 1.8 3.2 3.6 4 1 .5 1.6 1.4 1.6 2.5a4.2 4.2 0 0 1-7.3 2.8c2.4-1.2 3.6-3.4 4-6.2.1-.8.2-1.9.1-3.1Z"
+              fill="currentColor"
+              opacity=".55"
+            />
+          </svg>
+        </div>
+        <div class="nav-stack">
+          <button
+            class="nav-btn"
+            data-view="live"
+            type="button"
+            title="Tổng quan"
+          >
+            <svg viewBox="0 0 24 24">
+              <rect x="3" y="3" width="7" height="7" rx="1.5" />
+              <rect x="14" y="3" width="7" height="7" rx="1.5" />
+              <rect x="3" y="14" width="7" height="7" rx="1.5" />
+              <rect x="14" y="14" width="7" height="7" rx="1.5" />
+            </svg>
+          </button>
+          <button
+            class="nav-btn active"
+            data-view="live"
+            type="button"
+            title="Giám sát trực tiếp"
+          >
+            <svg viewBox="0 0 24 24">
+              <path
+                d="M4 8.5A2.5 2.5 0 0 1 6.5 6h7A2.5 2.5 0 0 1 16 8.5v7a2.5 2.5 0 0 1-2.5 2.5h-7A2.5 2.5 0 0 1 4 15.5v-7Z"
+              />
+              <path d="M16 10.2 20.2 8v8L16 13.8" />
+            </svg>
+          </button>
+          <button
+            class="nav-btn"
+            data-view="soon"
+            type="button"
+            title="Bản đồ — sắp có"
+          >
+            <svg viewBox="0 0 24 24">
+              <path d="M9 4.5 4 6.2v13.3l5-1.7 6 1.7 5-1.7V4.5l-5 1.7-6-1.7Z" />
+              <path d="M9 4.5v13.3M15 6.2v13.3" />
+            </svg>
+          </button>
+          <button
+            class="nav-btn"
+            data-view="soon"
+            type="button"
+            title="Xem lại — sắp có"
+          >
+            <svg viewBox="0 0 24 24">
+              <rect x="3" y="5" width="18" height="14" rx="2" />
+              <path d="M10 9.5v5l4.5-2.5-4.5-2.5Z" />
+            </svg>
+          </button>
+          <button
+            class="nav-btn"
+            data-view="soon"
+            type="button"
+            title="Thống kê — sắp có"
+          >
+            <svg viewBox="0 0 24 24">
+              <path d="M4 19V9M10 19V5M16 19v-7M22 19H2" />
+            </svg>
+          </button>
+          <button
+            class="nav-btn"
+            data-view="logs"
+            type="button"
+            title="Nhật ký"
+          >
+            <svg viewBox="0 0 24 24">
+              <rect x="5" y="3" width="14" height="18" rx="2" />
+              <path d="M9 8h6M9 12h6M9 16h4" />
+            </svg>
+          </button>
+        </div>
+        <div class="nav-bottom">
+          <button
+            class="nav-btn"
+            data-view="users"
+            data-perm="users"
+            type="button"
+            title="Tài khoản"
+          >
+            <svg viewBox="0 0 24 24">
+              <circle cx="12" cy="8" r="3.2" />
+              <path d="M5.5 19c.8-3.2 3.3-5 6.5-5s5.7 1.8 6.5 5" />
+            </svg>
+          </button>
+          <button
+            class="nav-btn"
+            data-view="settings"
+            type="button"
+            title="Cài đặt"
+          >
+            <svg viewBox="0 0 24 24">
+              <circle cx="12" cy="12" r="3" />
+              <path
+                d="M12 3.5v2.2M12 18.3v2.2M4.6 7.2l1.9 1.1M17.5 15.7l1.9 1.1M4.6 16.8l1.9-1.1M17.5 8.3l1.9-1.1"
+              />
+            </svg>
+          </button>
+        </div>
+      </nav>
+
+      <aside class="cam-sidebar" id="cam-sidebar">
+        <div class="sidebar-head">
+          <h2>Giám sát trực tiếp</h2>
+          <button
+            class="icon-btn"
+            id="btn-collapse-sidebar"
+            type="button"
+            title="Thu gọn"
+          >
+            <svg viewBox="0 0 24 24"><path d="M15 6 9 12l6 6" /></svg>
+          </button>
+        </div>
+        <div class="tree-scroll" id="cam-tree"></div>
+      </aside>
+
+      <div class="workspace">
+        <header class="main-header">
+          <button
+            class="icon-btn mobile-only"
+            id="btn-open-sidebar"
+            type="button"
+            title="Danh sách camera"
+          >
+            <svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16" /></svg>
+          </button>
+          <label class="header-search">
+            <svg viewBox="0 0 24 24">
+              <circle cx="11" cy="11" r="6.5" />
+              <path d="M16 16l4 4" />
+            </svg>
+            <input
+              id="cam-search"
+              type="search"
+              placeholder="Tìm camera"
+              autocomplete="off"
+            />
+          </label>
+          <div class="header-right">
+            <button
+              class="icon-btn"
+              id="btn-bell"
+              type="button"
+              title="Thông báo"
+            >
+              <svg viewBox="0 0 24 24">
+                <path d="M6 16V11a6 6 0 1 1 12 0v5l1.5 2H4.5L6 16Z" />
+                <path d="M10 19a2 2 0 0 0 4 0" />
+              </svg>
+              <span id="bell-badge" class="bell-badge hidden">0</span>
+            </button>
+            <button class="user-chip" id="btn-user" type="button">
+              <span class="avatar" id="user-avatar">QT</span>
+              <span class="user-meta">
+                <strong id="user-display-name">Quản trị viên</strong>
+                <small id="status-text" class="status-safe">An toàn</small>
+              </span>
+              <svg class="chevron" viewBox="0 0 24 24">
+                <path d="M7 10l5 5 5-5" />
+              </svg>
+            </button>
+            <div id="user-menu" class="dropdown hidden">
+              <button type="button" id="btn-activate" data-perm="siren">
+                Bật còi báo
+              </button>
+              <button type="button" id="btn-stop" class="hidden danger">
+                Tắt còi
+              </button>
+              <button type="button" id="btn-add-cam" data-perm="cameras">
+                Thêm camera
+              </button>
+              <button type="button" id="btn-change-pass">Đổi mật khẩu</button>
+              <button type="button" id="btn-logout">Đăng xuất</button>
             </div>
-            <div class="topbar-actions">
-                <button id="btn-activate" class="chip" type="button" title="Cho phép trình duyệt phát còi khi cảm biến báo gas. Không phải tiếng camera.">Bật còi báo</button>
-                <button id="btn-stop" class="chip chip-danger hidden" type="button">Tắt còi</button>
-                <button id="btn-add-cam" class="chip" type="button">Thêm camera</button>
-                <button id="btn-change-pass" class="chip chip-ghost" type="button">Mật khẩu</button>
-            </div>
+          </div>
         </header>
 
-        <main>
-            <section class="camera-section">
-                <div class="section-head">
-                    <h2>Camera trực tiếp</h2>
-                    <p class="hint">WebRTC · cấu hình trong config.json hoặc nút Thêm camera</p>
-                </div>
-                <div id="camera-grid" class="camera-grid"></div>
-            </section>
+        <div class="toolbar">
+          <div class="toolbar-date">
+            <svg viewBox="0 0 24 24">
+              <rect x="3.5" y="5" width="17" height="15" rx="2" />
+              <path d="M8 3.5v3M16 3.5v3M3.5 10h17" />
+            </svg>
+            <span id="clock-text"></span>
+          </div>
+          <div class="grid-switcher" role="tablist">
+            <button
+              class="layout-btn"
+              data-layout="1"
+              type="button"
+              title="1 camera"
+            >
+              <svg viewBox="0 0 24 24">
+                <rect x="5" y="5" width="14" height="14" rx="1.5" />
+              </svg>
+            </button>
+            <button
+              class="layout-btn active"
+              data-layout="4"
+              type="button"
+              title="Lưới 2×2"
+            >
+              <svg viewBox="0 0 24 24">
+                <rect x="4" y="4" width="7" height="7" rx="1" />
+                <rect x="13" y="4" width="7" height="7" rx="1" />
+                <rect x="4" y="13" width="7" height="7" rx="1" />
+                <rect x="13" y="13" width="7" height="7" rx="1" />
+              </svg>
+            </button>
+            <button
+              class="layout-btn"
+              data-layout="9"
+              type="button"
+              title="Lưới 3×3"
+            >
+              <svg viewBox="0 0 24 24">
+                <rect x="3.5" y="3.5" width="5" height="5" rx=".8" />
+                <rect x="9.5" y="3.5" width="5" height="5" rx=".8" />
+                <rect x="15.5" y="3.5" width="5" height="5" rx=".8" />
+                <rect x="3.5" y="9.5" width="5" height="5" rx=".8" />
+                <rect x="9.5" y="9.5" width="5" height="5" rx=".8" />
+                <rect x="15.5" y="9.5" width="5" height="5" rx=".8" />
+                <rect x="3.5" y="15.5" width="5" height="5" rx=".8" />
+                <rect x="9.5" y="15.5" width="5" height="5" rx=".8" />
+                <rect x="15.5" y="15.5" width="5" height="5" rx=".8" />
+              </svg>
+            </button>
+          </div>
+        </div>
 
-            <section class="log-panel">
-                <div class="log-header">
-                    <h2>Nhật ký</h2>
-                    <button id="btn-clear-log" class="chip chip-ghost" type="button">Xóa</button>
-                </div>
-                <ul id="log-list">
-                    <li>Hệ thống sẵn sàng.</li>
-                </ul>
-            </section>
+        <div id="alarm-banner" class="alarm-banner hidden">
+          <span class="pulse-dot"></span>
+          <strong>Cảnh báo gas</strong>
+          <span id="alarm-banner-text">Phát hiện bình gas</span>
+          <button type="button" id="btn-stop-banner">Tắt báo</button>
+        </div>
+
+        <main id="view-live" class="view-live">
+          <div id="camera-grid" class="video-grid layout-4"></div>
         </main>
+
+        <section id="view-logs" class="view-panel hidden">
+          <div class="panel-head">
+            <h2>Nhật ký hệ thống</h2>
+            <button id="btn-clear-log" class="text-btn" type="button">
+              Xóa
+            </button>
+          </div>
+          <ul id="log-list">
+            <li><span class="log-msg">Hệ thống sẵn sàng.</span></li>
+          </ul>
+        </section>
+
+        <section id="view-settings" class="view-panel hidden">
+          <div class="panel-head">
+            <h2>Cài đặt</h2>
+          </div>
+          <div class="settings-grid">
+            <article class="settings-card" data-perm="siren">
+              <h3>Còi báo động</h3>
+              <p>Cho phép trình duyệt phát siren khi cảm biến ESP32 báo gas.</p>
+              <button type="button" class="chip" id="btn-activate-settings">
+                Bật còi báo
+              </button>
+            </article>
+            <article class="settings-card" data-perm="cameras">
+              <h3>Camera</h3>
+              <p>Thêm luồng MediaMTX mới. Path phải khớp FFmpeg ingest.</p>
+              <button
+                type="button"
+                class="chip chip-primary"
+                id="btn-add-cam-settings"
+              >
+                Thêm camera
+              </button>
+            </article>
+            <article class="settings-card">
+              <h3>Mật khẩu</h3>
+              <p>Đổi mật khẩu tài khoản đang đăng nhập.</p>
+              <button type="button" class="chip" id="btn-change-pass-settings">
+                Đổi mật khẩu
+              </button>
+            </article>
+          </div>
+        </section>
+
+        <section id="view-users" class="view-panel hidden">
+          <div class="panel-head">
+            <h2>Tài khoản</h2>
+            <button id="btn-add-user" class="chip chip-primary" type="button">
+              Thêm tài khoản
+            </button>
+          </div>
+          <p class="hint">
+            Admin toàn quyền · Vận hành xem camera và còi · Chỉ xem thì chỉ theo
+            dõi live.
+          </p>
+          <table class="user-table">
+            <thead>
+              <tr>
+                <th>Tên</th>
+                <th>Đăng nhập</th>
+                <th>Vai trò</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="user-table-body"></tbody>
+          </table>
+        </section>
+      </div>
+    </div>
+
+    <div id="sidebar-backdrop" class="sidebar-backdrop hidden"></div>
+
+    <div id="user-modal" class="modal hidden">
+      <div class="modal-card">
+        <h3 id="user-modal-title">Thêm tài khoản</h3>
+        <form id="user-form">
+          <label
+            >Tên hiển thị
+            <input
+              type="text"
+              id="user-name"
+              placeholder="Nguyễn Văn A"
+              required
+            />
+          </label>
+          <label
+            >Tên đăng nhập
+            <input
+              type="text"
+              id="user-username"
+              placeholder="vanhanh"
+              pattern="[a-zA-Z0-9_-]+"
+              required
+            />
+          </label>
+          <label
+            >Vai trò
+            <select id="user-role">
+              <option value="viewer">Chỉ xem</option>
+              <option value="operator">Vận hành</option>
+              <option value="admin">Quản trị viên</option>
+            </select>
+          </label>
+          <label id="user-pass-label"
+            >Mật khẩu
+            <input
+              type="password"
+              id="user-password"
+              placeholder="Ít nhất 3 ký tự"
+            />
+          </label>
+          <label class="check">
+            <input type="checkbox" id="user-enabled" checked />
+            Đang hoạt động
+          </label>
+          <div class="modal-actions">
+            <button
+              type="button"
+              id="user-modal-delete"
+              class="chip chip-danger hidden"
+            >
+              Xóa
+            </button>
+            <span class="modal-spacer"></span>
+            <button
+              type="button"
+              id="user-modal-cancel"
+              class="chip chip-ghost"
+            >
+              Hủy
+            </button>
+            <button type="submit" class="chip chip-primary">Lưu</button>
+          </div>
+        </form>
+      </div>
     </div>
 
     <div id="cam-modal" class="modal hidden">
-        <div class="modal-card">
-            <h3 id="cam-modal-title">Thêm camera</h3>
-            <form id="cam-form">
-                <label>Tên hiển thị
-                    <input type="text" id="cam-name" placeholder="Sân trước" required>
-                </label>
-                <label>ID / path MediaMTX
-                    <input type="text" id="cam-id" placeholder="cam" pattern="[a-zA-Z0-9_-]+" required>
-                </label>
-                <label>Sensor ESP (cách nhau bởi dấu phẩy, để trống = mọi cảm biến)
-                    <input type="text" id="cam-sensors" placeholder="esp32-1, kho-1">
-                </label>
-                <label class="check">
-                    <input type="checkbox" id="cam-auto" checked>
-                    Tự kết nối khi mở trang
-                </label>
-                <div class="modal-actions">
-                    <button type="button" id="cam-modal-cancel" class="chip chip-ghost">Hủy</button>
-                    <button type="submit" class="chip chip-primary">Lưu</button>
-                </div>
-            </form>
-        </div>
+      <div class="modal-card">
+        <h3 id="cam-modal-title">Thêm camera</h3>
+        <form id="cam-form">
+          <label
+            >Tên hiển thị
+            <input type="text" id="cam-name" placeholder="CCTV 01" required />
+          </label>
+          <label
+            >Nhóm / khu vực
+            <input type="text" id="cam-group" placeholder="Khu vực chính" />
+          </label>
+          <label
+            >ID / path MediaMTX
+            <input
+              type="text"
+              id="cam-id"
+              placeholder="cam"
+              pattern="[a-zA-Z0-9_-]+"
+              required
+            />
+          </label>
+          <label
+            >Sensor ESP (cách nhau bởi dấu phẩy, để trống = mọi cảm biến)
+            <input type="text" id="cam-sensors" placeholder="esp32-1, kho-1" />
+          </label>
+          <label class="check">
+            <input type="checkbox" id="cam-auto" checked />
+            Tự kết nối khi mở trang
+          </label>
+          <div class="modal-actions">
+            <button
+              type="button"
+              id="cam-modal-delete"
+              class="chip chip-danger hidden"
+            >
+              Xóa
+            </button>
+            <span class="modal-spacer"></span>
+            <button type="button" id="cam-modal-cancel" class="chip chip-ghost">
+              Hủy
+            </button>
+            <button type="submit" class="chip chip-primary">Lưu</button>
+          </div>
+        </form>
+      </div>
     </div>
 
     <audio id="siren-audio" loop preload="auto">
-        <source src="siren.mp3" type="audio/mpeg">
+      <source src="siren.mp3" type="audio/mpeg" />
     </audio>
 
     <script src="/socket.io/socket.io.js"></script>
     <script src="app.js"></script>
-</body>
+  </body>
 </html>

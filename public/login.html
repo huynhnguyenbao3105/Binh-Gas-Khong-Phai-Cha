@@ -5,41 +5,53 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Đăng nhập · Giám sát gas</title>
     <link rel="stylesheet" href="style.css">
-    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body class="login-page">
     <div class="login-card">
-        <span class="brand-mark">G</span>
+        <div class="nav-logo" aria-hidden="true">
+            <svg viewBox="0 0 24 24">
+                <path d="M4 14c3.2-1.4 5.2-4.2 6.2-7.6.4 2.4 1.6 4.4 3.6 5.8 1.4.9 2.2 2.2 2.2 3.8A6 6 0 0 1 10 22C6.7 22 4 19.3 4 16c0-.7.1-1.4.3-2Z" fill="currentColor"/>
+                <path d="M14.5 6.2c.6 1.8 1.8 3.2 3.6 4 1 .5 1.6 1.4 1.6 2.5a4.2 4.2 0 0 1-7.3 2.8c2.4-1.2 3.6-3.4 4-6.2.1-.8.2-1.9.1-3.1Z" fill="currentColor" opacity=".55"/>
+            </svg>
+        </div>
         <h1>Giám sát gas</h1>
-        <p>Nhập mật khẩu để xem camera và cảnh báo.</p>
-        <input type="password" id="pass-input" placeholder="Mật khẩu" autofocus>
+        <p>Đăng nhập bằng tài khoản được cấp.</p>
+        <input type="text" id="user-input" placeholder="Tên đăng nhập" autocomplete="username" autofocus>
+        <input type="password" id="pass-input" placeholder="Mật khẩu" autocomplete="current-password">
         <button id="btn-login" class="chip chip-primary" type="button">Đăng nhập</button>
-        <p id="error-msg" class="login-error hidden">Sai mật khẩu</p>
+        <p id="error-msg" class="login-error hidden">Sai tài khoản hoặc mật khẩu</p>
     </div>
 
     <script>
+        const userInput = document.getElementById('user-input');
         const passInput = document.getElementById('pass-input');
         const errorMsg = document.getElementById('error-msg');
 
         async function login() {
-            const pass = passInput.value;
+            errorMsg.classList.add('hidden');
             const res = await fetch('/api/login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ password: pass })
+                body: JSON.stringify({
+                    username: userInput.value.trim(),
+                    password: passInput.value
+                })
             });
             const data = await res.json();
             if (data.success) {
-                document.cookie = `auth_token=${pass}; max-age=31536000; path=/`;
                 window.location.href = '/';
             } else {
+                errorMsg.textContent = data.error || 'Sai tài khoản hoặc mật khẩu';
                 errorMsg.classList.remove('hidden');
             }
         }
 
         document.getElementById('btn-login').addEventListener('click', login);
-        passInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') login();
+        [userInput, passInput].forEach((el) => {
+            el.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') login();
+            });
         });
     </script>
 </body>

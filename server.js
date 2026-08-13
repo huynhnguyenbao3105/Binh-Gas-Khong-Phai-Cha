@@ -5,14 +5,19 @@ const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+const crypto = require('crypto');
+const bcrypt = require('bcryptjs');
 const { exec, spawn } = require('child_process');
 
 const configPath = path.join(__dirname, 'config.json');
+const VALID_ROLES = ['admin', 'operator', 'viewer'];
+const TOKEN_DAYS = 30;
 
 function defaultCameras() {
   return [{
     id: 'cam',
     name: 'Camera 1',
+    group: 'Khu vực chính',
     enabled: true,
     autoConnect: true,
     path: 'cam',
@@ -31,6 +36,7 @@ function normalizeCamera(cam, index) {
   return {
     id,
     name: (cam && cam.name) ? String(cam.name).trim() : id,
+    group: (cam && cam.group) ? String(cam.group).trim() : 'Khu vực chính',
     enabled: !cam || cam.enabled !== false,
     autoConnect: !cam || cam.autoConnect !== false,
     path: sanitizeId(cam && cam.path, id),
@@ -40,36 +46,174 @@ function normalizeCamera(cam, index) {
   };
 }
 
+function hashPassword(plain) {
+  return bcrypt.hashSync(String(plain), 10);
+}
+
+function publicUser(user) {
+  if (!user) return null;
+  return {
+    id: user.id,
+    username: user.username,
+    name: user.name,
+    role: user.role,
+    enabled: user.enabled !== false
+  };
+}
+
+function normalizeUser(raw, index) {
+  const username = sanitizeId(raw && (raw.username || raw.id), 'user' + (index + 1)).toLowerCase();
+  let role = String((raw && raw.role) || 'viewer').toLowerCase();
+  if (!VALID_ROLES.includes(role)) role = 'viewer';
+  let passwordHash = raw && raw.passwordHash ? String(raw.passwordHash) : '';
+  if (raw && raw.password) passwordHash = hashPassword(raw.password);
+  if (!passwordHash) passwordHash = hashPassword('123');
+  return {
+    id: sanitizeId(raw && raw.id, username),
+    username,
+    name: (raw && raw.name) ? String(raw.name).trim() : username,
+    role,
+    passwordHash,
+    enabled: !raw || raw.enabled !== false
+  };
+}
+
 function normalizeConfig(raw) {
   const source = raw && typeof raw === 'object' ? raw : {};
   const cameras = Array.isArray(source.cameras) && source.cameras.length
     ? source.cameras.map(normalizeCamera)
     : defaultCameras();
-  return {
-    password: source.password || '123',
-    cameras
-  };
+  let users = Array.isArray(source.users) && source.users.length
+    ? source.users.map(normalizeUser)
+    : [normalizeUser({
+        username: 'admin',
+        name: 'Quản trị viên',
+        role: 'admin',
+        password: source.password || '123'
+      }, 0)];
+  if (!users.some((u) => u.role === 'admin' && u.enabled !== false)) {
+    users[0].role = 'admin';
+    users[0].enabled = true;
+  }
+  const sessionSecret = source.sessionSecret && String(source.sessionSecret).length >= 16
+    ? String(source.sessionSecret)
+    : crypto.randomBytes(32).toString('hex');
+  return { cameras, users, sessionSecret };
+}
+
+function needsPersist(raw) {
+  if (!raw || typeof raw !== 'object') return true;
+  if (!raw.sessionSecret || String(raw.sessionSecret).length < 16) return true;
+  if (!Array.isArray(raw.users) || !raw.users.length) return true;
+  if (raw.password) return true;
+  if (raw.users.some((u) => u && u.password && !u.passwordHash)) return true;
+  return false;
 }
 
 function loadConfig() {
-  if (fs.existsSync(configPath)) {
-    return normalizeConfig(JSON.parse(fs.readFileSync(configPath, 'utf8')));
+  if (!fs.existsSync(configPath)) {
+    const created = normalizeConfig({ password: '123' });
+    fs.writeFileSync(configPath, JSON.stringify({
+      sessionSecret: created.sessionSecret,
+      users: created.users,
+      cameras: created.cameras
+    }, null, 2));
+    return created;
   }
-  const created = normalizeConfig({ password: '123' });
-  fs.writeFileSync(configPath, JSON.stringify(created, null, 2));
-  return created;
+  const raw = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+  const normalized = normalizeConfig(raw);
+  if (needsPersist(raw)) {
+    const toSave = {
+      sessionSecret: normalized.sessionSecret,
+      users: normalized.users,
+      cameras: normalized.cameras
+    };
+    fs.writeFileSync(configPath, JSON.stringify(toSave, null, 2));
+  }
+  return normalized;
 }
 
 function saveConfig() {
-  fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+  const toSave = {
+    sessionSecret: config.sessionSecret,
+    users: config.users,
+    cameras: config.cameras
+  };
+  fs.writeFileSync(configPath, JSON.stringify(toSave, null, 2));
   writeMediaMTXConfigFile();
 }
 
-function publicConfig() {
+function publicConfig(user) {
   return {
     webrtcPort: 8889,
     rtspPort: 8554,
-    cameras: config.cameras
+    cameras: config.cameras,
+    me: publicUser(user)
+  };
+}
+
+function parseCookies(req) {
+  const out = {};
+  String(req.headers.cookie || '').split(';').forEach((part) => {
+    const idx = part.indexOf('=');
+    if (idx < 0) return;
+    out[part.slice(0, idx).trim()] = decodeURIComponent(part.slice(idx + 1).trim());
+  });
+  return out;
+}
+
+function setAuthCookie(res, token) {
+  res.setHeader('Set-Cookie', `auth_token=${token}; Max-Age=${TOKEN_DAYS * 86400}; Path=/; HttpOnly; SameSite=Lax`);
+}
+
+function clearAuthCookie(res) {
+  res.setHeader('Set-Cookie', 'auth_token=; Max-Age=0; Path=/; HttpOnly; SameSite=Lax');
+}
+
+function signToken(userId) {
+  const payload = Buffer.from(JSON.stringify({
+    uid: userId,
+    exp: Date.now() + TOKEN_DAYS * 86400 * 1000
+  })).toString('base64url');
+  const sig = crypto.createHmac('sha256', config.sessionSecret).update(payload).digest('base64url');
+  return `${payload}.${sig}`;
+}
+
+function safeEqual(a, b) {
+  const ba = Buffer.from(String(a));
+  const bb = Buffer.from(String(b));
+  if (ba.length !== bb.length) return false;
+  return crypto.timingSafeEqual(ba, bb);
+}
+
+function verifyToken(token) {
+  const parts = String(token || '').split('.');
+  if (parts.length !== 2) return null;
+  const [payload, sig] = parts;
+  const expected = crypto.createHmac('sha256', config.sessionSecret).update(payload).digest('base64url');
+  if (!safeEqual(sig, expected)) return null;
+  try {
+    const data = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+    if (!data || data.exp < Date.now() || !data.uid) return null;
+    return data.uid;
+  } catch (err) {
+    return null;
+  }
+}
+
+function userFromRequest(req) {
+  const uid = verifyToken(parseCookies(req).auth_token);
+  if (!uid) return null;
+  return config.users.find((u) => u.id === uid && u.enabled !== false) || null;
+}
+
+function requireRole(...roles) {
+  return (req, res, next) => {
+    if (!req.user) return res.status(401).json({ success: false, error: 'Unauthorized' });
+    if (!roles.includes(req.user.role)) {
+      return res.status(403).json({ success: false, error: 'Không có quyền thực hiện thao tác này' });
+    }
+    next();
   };
 }
 
@@ -87,20 +231,12 @@ app.use(cors());
 app.use(express.json());
 
 app.use((req, res, next) => {
-    const PUBLIC_PATHS = ['/login.html', '/style.css', '/api/trigger', '/api/login', '/siren.mp3'];
-    if (PUBLIC_PATHS.includes(req.path)) {
+    req.user = userFromRequest(req);
+    const PUBLIC_PATHS = ['/login.html', '/style.css', '/api/trigger', '/api/login', '/api/logout', '/siren.mp3'];
+    if (PUBLIC_PATHS.includes(req.path) || req.path.startsWith('/socket.io/')) {
         return next();
     }
-
-    if (req.path.startsWith('/socket.io/')) {
-        return next();
-    }
-
-    const cookies = req.headers.cookie || '';
-    if (cookies.includes(`auth_token=${config.password}`)) {
-        return next();
-    }
-
+    if (req.user) return next();
     if (req.path.startsWith('/api/')) {
         return res.status(401).json({ error: 'Unauthorized' });
     }
@@ -110,39 +246,66 @@ app.use((req, res, next) => {
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.post('/api/login', (req, res) => {
-    if (req.body.password === config.password) {
-        res.json({ success: true });
-    } else {
-        res.json({ success: false });
+    const username = String((req.body && req.body.username) || '').trim().toLowerCase();
+    const password = String((req.body && req.body.password) || '');
+    const user = config.users.find((u) => u.username === username && u.enabled !== false);
+    let ok = false;
+    try {
+        ok = Boolean(user && bcrypt.compareSync(password, user.passwordHash));
+    } catch (err) {
+        ok = false;
     }
+    if (!ok) {
+        return res.json({ success: false, error: 'Sai tài khoản hoặc mật khẩu' });
+    }
+    setAuthCookie(res, signToken(user.id));
+    res.json({ success: true, user: publicUser(user) });
+});
+
+app.post('/api/logout', (req, res) => {
+    clearAuthCookie(res);
+    res.json({ success: true });
+});
+
+app.get('/api/me', (req, res) => {
+    res.json({ success: true, user: publicUser(req.user) });
 });
 
 app.post('/api/change-password', (req, res) => {
-    const newPass = req.body.newPassword;
-    if (newPass && newPass.length > 0) {
-        config.password = newPass;
-        saveConfig();
-        res.json({ success: true });
-    } else {
-        res.json({ success: false });
+    const currentPassword = String((req.body && req.body.currentPassword) || '');
+    const newPass = String((req.body && req.body.newPassword) || '');
+    if (newPass.length < 3) {
+        return res.json({ success: false, error: 'Mật khẩu mới tối thiểu 3 ký tự' });
     }
+    let match = false;
+    try {
+        match = bcrypt.compareSync(currentPassword, req.user.passwordHash);
+    } catch (err) {
+        match = false;
+    }
+    if (!match) {
+        return res.json({ success: false, error: 'Mật khẩu hiện tại không đúng' });
+    }
+    req.user.passwordHash = hashPassword(newPass);
+    saveConfig();
+    res.json({ success: true });
 });
 
 app.get('/api/config', (req, res) => {
-    res.json(publicConfig());
+    res.json(publicConfig(req.user));
 });
 
-app.post('/api/cameras', (req, res) => {
+app.post('/api/cameras', requireRole('admin'), (req, res) => {
     const cam = normalizeCamera(req.body || {}, config.cameras.length);
     if (config.cameras.some((c) => c.id === cam.id || c.path === cam.path)) {
         return res.status(409).json({ success: false, error: 'Camera id/path đã tồn tại' });
     }
     config.cameras.push(cam);
     saveConfig();
-    res.json({ success: true, camera: cam, config: publicConfig() });
+    res.json({ success: true, camera: cam, config: publicConfig(req.user) });
 });
 
-app.put('/api/cameras/:id', (req, res) => {
+app.put('/api/cameras/:id', requireRole('admin'), (req, res) => {
     const idx = config.cameras.findIndex((c) => c.id === req.params.id);
     if (idx < 0) {
         return res.status(404).json({ success: false, error: 'Không tìm thấy camera' });
@@ -154,10 +317,10 @@ app.put('/api/cameras/:id', (req, res) => {
     }
     config.cameras[idx] = merged;
     saveConfig();
-    res.json({ success: true, camera: merged, config: publicConfig() });
+    res.json({ success: true, camera: merged, config: publicConfig(req.user) });
 });
 
-app.delete('/api/cameras/:id', (req, res) => {
+app.delete('/api/cameras/:id', requireRole('admin'), (req, res) => {
     if (config.cameras.length <= 1) {
         return res.status(400).json({ success: false, error: 'Phải giữ ít nhất 1 camera' });
     }
@@ -167,7 +330,79 @@ app.delete('/api/cameras/:id', (req, res) => {
         return res.status(404).json({ success: false, error: 'Không tìm thấy camera' });
     }
     saveConfig();
-    res.json({ success: true, config: publicConfig() });
+    res.json({ success: true, config: publicConfig(req.user) });
+});
+
+app.get('/api/users', requireRole('admin'), (req, res) => {
+    res.json({ success: true, users: config.users.map(publicUser) });
+});
+
+app.post('/api/users', requireRole('admin'), (req, res) => {
+    const body = req.body || {};
+    const password = String(body.password || '');
+    if (password.length < 3) {
+        return res.status(400).json({ success: false, error: 'Mật khẩu tối thiểu 3 ký tự' });
+    }
+    const user = normalizeUser({
+        username: body.username,
+        name: body.name,
+        role: body.role,
+        password,
+        enabled: body.enabled
+    }, config.users.length);
+    if (config.users.some((u) => u.username === user.username || u.id === user.id)) {
+        return res.status(409).json({ success: false, error: 'Tên đăng nhập đã tồn tại' });
+    }
+    config.users.push(user);
+    saveConfig();
+    res.json({ success: true, user: publicUser(user), users: config.users.map(publicUser) });
+});
+
+app.put('/api/users/:id', requireRole('admin'), (req, res) => {
+    const idx = config.users.findIndex((u) => u.id === req.params.id);
+    if (idx < 0) {
+        return res.status(404).json({ success: false, error: 'Không tìm thấy tài khoản' });
+    }
+    const body = req.body || {};
+    const current = config.users[idx];
+    const next = normalizeUser({
+        ...current,
+        name: body.name != null ? body.name : current.name,
+        role: body.role != null ? body.role : current.role,
+        enabled: body.enabled != null ? body.enabled : current.enabled,
+        password: body.password ? body.password : undefined,
+        passwordHash: body.password ? undefined : current.passwordHash
+    }, idx);
+    next.id = current.id;
+    next.username = current.username;
+    if (next.role !== 'admin' || next.enabled === false) {
+        const otherAdmin = config.users.some((u, i) => i !== idx && u.role === 'admin' && u.enabled !== false);
+        if (!otherAdmin) {
+            return res.status(400).json({ success: false, error: 'Phải giữ ít nhất 1 quản trị viên' });
+        }
+    }
+    config.users[idx] = next;
+    saveConfig();
+    res.json({ success: true, user: publicUser(next), users: config.users.map(publicUser) });
+});
+
+app.delete('/api/users/:id', requireRole('admin'), (req, res) => {
+    if (req.params.id === req.user.id) {
+        return res.status(400).json({ success: false, error: 'Không thể xóa chính mình' });
+    }
+    const target = config.users.find((u) => u.id === req.params.id);
+    if (!target) {
+        return res.status(404).json({ success: false, error: 'Không tìm thấy tài khoản' });
+    }
+    if (target.role === 'admin') {
+        const otherAdmin = config.users.some((u) => u.id !== target.id && u.role === 'admin' && u.enabled !== false);
+        if (!otherAdmin) {
+            return res.status(400).json({ success: false, error: 'Phải giữ ít nhất 1 quản trị viên' });
+        }
+    }
+    config.users = config.users.filter((u) => u.id !== req.params.id);
+    saveConfig();
+    res.json({ success: true, users: config.users.map(publicUser) });
 });
 
 app.get('/api/trigger', (req, res) => {

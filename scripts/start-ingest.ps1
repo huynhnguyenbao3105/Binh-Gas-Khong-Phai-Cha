@@ -1,14 +1,27 @@
 param(
-  [string]$CameraUrl = "rtsp://admin:L26C6CB7@192.168.1.3:554/cam/realmonitor?channel=1&subtype=1",
-  [string]$PublishUrl = "rtsp://159.198.42.40:8554/cam",
+  [string]$PublishHost = "localhost",
+  [int]$RtspPort = 8554,
   [int]$RestartDelaySeconds = 5
 )
 
 $ErrorActionPreference = "Stop"
 
-# Kiểm tra xem FFmpeg đã được cài đặt chưa
-$FfmpegPath = (Get-Command ffmpeg -ErrorAction SilentlyContinue).Source
+# Them camera: copy 1 dong trong mang, doi Name / Path / RtspUrl.
+# Path phai khop camera tren dashboard (MediaMTX), vi du "cam", "kho".
+$Cameras = @(
+  @{
+    Name    = "Camera 1"
+    Path    = "cam"
+    RtspUrl = "rtsp://admin:L26C6CB7@192.168.1.3:554/cam/realmonitor?channel=1&subtype=1"
+  }
+  # @{
+  #   Name    = "Camera 2"
+  #   Path    = "kho"
+  #   RtspUrl = "rtsp://admin:L26C6CB7@192.168.1.3:554/cam/realmonitor?channel=2&subtype=1"
+  # }
+)
 
+$FfmpegPath = (Get-Command ffmpeg -ErrorAction SilentlyContinue).Source
 if (-not $FfmpegPath) {
   Write-Host "FFmpeg not found. Trying to find in WinGet packages..."
   $wingetFfmpeg = Get-ChildItem -Path "$env:LOCALAPPDATA\Microsoft\WinGet\Packages" -Recurse -Filter ffmpeg.exe -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
@@ -23,40 +36,92 @@ if (-not $FfmpegPath -or -not (Test-Path $FfmpegPath)) {
   exit 1
 }
 
+function Mask-Rtsp([string]$url) {
+  if (-not $url) { return "" }
+  return ($url -replace "://([^:/]+):([^@/]+)@", "://`$1:***@")
+}
+
+$jobs = @()
+foreach ($cam in $Cameras) {
+  if (-not $cam.RtspUrl -or -not $cam.Path) { continue }
+  $jobs += [pscustomobject]@{
+    Name       = $(if ($cam.Name) { $cam.Name } else { $cam.Path })
+    Path       = [string]$cam.Path
+    RtspUrl    = [string]$cam.RtspUrl
+    PublishUrl = "rtsp://${PublishHost}:${RtspPort}/$($cam.Path)"
+  }
+}
+
+if ($jobs.Count -eq 0) {
+  Write-Host "Chua khai bao camera nao trong `$Cameras." -ForegroundColor Red
+  exit 1
+}
+
 Write-Host "==============================================" -ForegroundColor Cyan
 Write-Host "   WARNING SOUND - RTSP INGEST BRIDGE" -ForegroundColor Cyan
 Write-Host "==============================================" -ForegroundColor Cyan
-Write-Host "Ingesting from: $CameraUrl"
-Write-Host "Publishing to : $PublishUrl"
-Write-Host "Press Ctrl+C to stop." -ForegroundColor Yellow
+foreach ($cam in $jobs) {
+  Write-Host ("  {0}: {1}  ->  {2}" -f $cam.Name, (Mask-Rtsp $cam.RtspUrl), $cam.PublishUrl)
+}
+Write-Host "Press Ctrl+C to stop all." -ForegroundColor Yellow
 Write-Host "==============================================" -ForegroundColor Cyan
 
-while ($true) {
-  $startedAt = Get-Date
-  Write-Host "[$($startedAt.ToString("HH:mm:ss"))] Đang kích hoạt FFmpeg Ingest..."
+$states = @{}
+foreach ($cam in $jobs) {
+  $states[$cam.Path] = @{
+    Cam       = $cam
+    Process   = $null
+    NextStart = Get-Date
+  }
+}
 
+function Start-CamIngest($state) {
+  $cam = $state.Cam
   $ffmpegArgs = @(
     "-hide_banner",
     "-loglevel", "warning",
     "-fflags", "nobuffer",
     "-flags", "low_delay",
     "-rtsp_transport", "tcp",
-    "-i", $CameraUrl,
+    "-i", $cam.RtspUrl,
     "-map", "0:v:0",
-    "-c:v", "copy",   # Copy original Video stream (No CPU load)
-    "-an",            # Disable Audio
+    "-c:v", "copy",
+    "-an",
     "-f", "rtsp",
     "-rtsp_transport", "tcp",
-    $PublishUrl
+    $cam.PublishUrl
   )
-  
-  $process = Start-Process -FilePath $FfmpegPath -ArgumentList $ffmpegArgs -NoNewWindow -PassThru -Wait
-  
-  if ($process.ExitCode -ne 0) {
-    Write-Host "`n[!] FFmpeg crashed or disconnected (Exit code: $($process.ExitCode)). Retrying in $RestartDelaySeconds seconds..." -ForegroundColor Red
-  } else {
-    Write-Host "`n[!] FFmpeg stopped gracefully. Retrying in $RestartDelaySeconds seconds..." -ForegroundColor Yellow
+  Write-Host ("[{0}] {1}: bat FFmpeg -> {2}" -f (Get-Date -Format "HH:mm:ss"), $cam.Name, $cam.PublishUrl) -ForegroundColor Green
+  $state.Process = Start-Process -FilePath $FfmpegPath -ArgumentList $ffmpegArgs -NoNewWindow -PassThru
+}
+
+function Stop-AllIngest {
+  foreach ($state in @($states.Values)) {
+    if ($state.Process -and -not $state.Process.HasExited) {
+      try { Stop-Process -Id $state.Process.Id -Force -ErrorAction SilentlyContinue } catch {}
+    }
   }
-  
-  Start-Sleep -Seconds $RestartDelaySeconds
+}
+
+Register-EngineEvent PowerShell.Exiting -Action { Stop-AllIngest } | Out-Null
+try {
+  while ($true) {
+    foreach ($id in @($states.Keys)) {
+      $state = $states[$id]
+      $proc = $state.Process
+      if ($proc -and -not $proc.HasExited) { continue }
+      if ($proc -and $proc.HasExited) {
+        Write-Host ("[{0}] {1}: FFmpeg dung (exit {2}). Thu lai sau {3}s..." -f (Get-Date -Format "HH:mm:ss"), $state.Cam.Name, $proc.ExitCode, $RestartDelaySeconds) -ForegroundColor Red
+        $state.Process = $null
+        $state.NextStart = (Get-Date).AddSeconds($RestartDelaySeconds)
+      }
+      if ((Get-Date) -ge $state.NextStart) {
+        Start-CamIngest $state
+      }
+    }
+    Start-Sleep -Milliseconds 800
+  }
+} finally {
+  Write-Host "Dang dung tat ca FFmpeg..." -ForegroundColor Yellow
+  Stop-AllIngest
 }
