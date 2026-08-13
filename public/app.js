@@ -5,7 +5,11 @@ const btnActivate = document.getElementById("btn-activate");
 const btnActivateSettings = document.getElementById("btn-activate-settings");
 const btnStop = document.getElementById("btn-stop");
 const btnStopBanner = document.getElementById("btn-stop-banner");
-const statusText = document.getElementById("status-text");
+const ROLE_LABELS = {
+  admin: "Quản trị viên",
+  operator: "Vận hành",
+  viewer: "Chỉ xem",
+};
 const logList = document.getElementById("log-list");
 const btnClearLog = document.getElementById("btn-clear-log");
 const btnChangePass = document.getElementById("btn-change-pass");
@@ -31,7 +35,22 @@ const sidebarBackdrop = document.getElementById("sidebar-backdrop");
 let isSystemActive = true;
 let audioUnlocked = false;
 let alarmTimeout;
-let appConfig = { webrtcPort: 8889, rtspPort: 8554, cameras: [], me: null };
+let appConfig = {
+  webrtcPort: 8889,
+  rtspPort: 8554,
+  cameras: [],
+  me: null,
+  sounds: {},
+  soundFiles: [],
+};
+let previewAudio = null;
+
+const SOUND_EVENTS = [
+  { id: "gas", label: "Cảm biến gas" },
+  { id: "emergency", label: "Cảnh báo khẩn cấp" },
+  { id: "meal", label: "11:45 dọn cơm" },
+  { id: "home", label: "17:55 chuẩn bị về" },
+];
 const players = new Map();
 let currentLayout = 4;
 let selectedCamId = null;
@@ -40,7 +59,6 @@ let searchQuery = "";
 let alertCount = 0;
 let collapsedGroups = new Set();
 let currentUser = null;
-let userList = [];
 let mealSchedule = [];
 
 const MEAL_DAY_LABELS = {
@@ -53,15 +71,9 @@ const MEAL_DAY_LABELS = {
   sun: "Chủ nhật",
 };
 
-const ROLE_LABELS = {
-  admin: "Quản trị viên",
-  operator: "Vận hành",
-  viewer: "Chỉ xem",
-};
-
 function can(perm) {
   const role = currentUser && currentUser.role;
-  if (perm === "cameras" || perm === "users") return role === "admin";
+  if (perm === "cameras") return role === "admin";
   if (perm === "siren") return role === "admin" || role === "operator";
   return Boolean(role);
 }
@@ -94,6 +106,12 @@ function syncUserChrome() {
   if (nameEl) nameEl.textContent = currentUser.name || currentUser.username;
   if (avatarEl)
     avatarEl.textContent = initials(currentUser.name || currentUser.username);
+  const roleEl = document.getElementById("status-text");
+  if (roleEl) {
+    roleEl.textContent =
+      ROLE_LABELS[currentUser.role] || currentUser.role || "";
+    roleEl.className = "user-role";
+  }
   applyPermissions();
 }
 
@@ -613,7 +631,6 @@ function selectCamera(id, fromUser) {
 }
 
 function setView(view) {
-  if (view === "users" && !can("users")) view = "live";
   document
     .getElementById("view-live")
     .classList.toggle("hidden", view !== "live");
@@ -626,15 +643,12 @@ function setView(view) {
   document
     .getElementById("view-settings")
     .classList.toggle("hidden", view !== "settings");
-  document
-    .getElementById("view-users")
-    .classList.toggle("hidden", view !== "users");
 
   document.querySelectorAll(".nav-btn").forEach((btn) => {
     btn.classList.toggle("active", btn.dataset.view === view);
   });
-  if (view === "users") loadUsers();
   if (view === "meals") renderMealSchedule();
+  if (view === "settings") renderSoundSettings();
 }
 
 function tickClock() {
@@ -665,8 +679,192 @@ function syncSirenButtons() {
   }
 }
 
+function soundUrl(file) {
+  if (!file) return "";
+  return "/sounds/" + encodeURIComponent(file);
+}
+
+function assignedSound(kind) {
+  return (appConfig.sounds && appConfig.sounds[kind]) || "";
+}
+
+function stopPreviewSound() {
+  if (!previewAudio) return;
+  previewAudio.pause();
+  previewAudio.src = "";
+  previewAudio = null;
+}
+
+function playAlertSound(kind) {
+  if (!isSystemActive || !audioPlayer) return;
+  const file = assignedSound(kind);
+  if (!file) return;
+  stopPreviewSound();
+  audioPlayer.src = soundUrl(file);
+  audioPlayer.loop = true;
+  audioPlayer.volume = 1;
+  audioPlayer.currentTime = 0;
+  audioPlayer.play().catch(() => {
+    audioUnlocked = false;
+    unlockAudio();
+  });
+}
+
+function previewSound(file) {
+  if (!file) return;
+  stopPreviewSound();
+  if (audioPlayer && !audioPlayer.paused) {
+    audioPlayer.pause();
+    audioPlayer.currentTime = 0;
+  }
+  previewAudio = new Audio(soundUrl(file));
+  previewAudio.play().catch(() => unlockAudio());
+}
+
+function prettySoundName(file) {
+  if (!file) return "Không phát";
+  const raw = file
+    .replace(/\.[^.]+$/, "")
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return raw ? raw.charAt(0).toUpperCase() + raw.slice(1) : file;
+}
+
+function closeSoundPickers(except) {
+  document.querySelectorAll(".sound-picker.open").forEach((el) => {
+    if (el !== except) el.classList.remove("open");
+  });
+}
+
+function setSoundPickerValue(picker, value) {
+  picker.dataset.value = value || "";
+  const label = picker.querySelector(".sound-picker-btn span");
+  if (label) label.textContent = prettySoundName(value);
+  picker.querySelectorAll(".sound-option").forEach((btn) => {
+    btn.classList.toggle("active", (btn.dataset.value || "") === (value || ""));
+  });
+}
+
+function createSoundPicker(eventId, selected, files) {
+  const picker = document.createElement("div");
+  picker.className = "sound-picker";
+  picker.dataset.event = eventId;
+  picker.dataset.value = selected || "";
+
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "sound-picker-btn";
+  btn.innerHTML = `<span></span><svg viewBox="0 0 24 24"><path d="M7 10l5 5 5-5"/></svg>`;
+  btn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const open = !picker.classList.contains("open");
+    closeSoundPickers(picker);
+    picker.classList.toggle("open", open);
+  });
+
+  const menu = document.createElement("div");
+  menu.className = "sound-picker-menu";
+  const options = [{ value: "", label: "Không phát" }].concat(
+    files.map((file) => ({ value: file, label: prettySoundName(file) })),
+  );
+  options.forEach((item) => {
+    const opt = document.createElement("button");
+    opt.type = "button";
+    opt.className = "sound-option";
+    opt.dataset.value = item.value;
+    opt.textContent = item.label;
+    if (item.value) {
+      const ext = document.createElement("small");
+      ext.textContent = item.value.split(".").pop().toUpperCase();
+      opt.appendChild(ext);
+    }
+    opt.addEventListener("click", (e) => {
+      e.stopPropagation();
+      setSoundPickerValue(picker, item.value);
+      picker.classList.remove("open");
+      saveSoundAssignments();
+    });
+    menu.appendChild(opt);
+  });
+
+  picker.append(btn, menu);
+  setSoundPickerValue(picker, selected);
+  return picker;
+}
+
+function renderSoundSettings() {
+  const body = document.getElementById("sound-table-body");
+  if (!body) return;
+  const editable = can("siren");
+  const files = appConfig.soundFiles || [];
+  const assignments = appConfig.sounds || {};
+  body.innerHTML = "";
+  SOUND_EVENTS.forEach((event) => {
+    const tr = document.createElement("tr");
+    const labelCell = document.createElement("td");
+    labelCell.textContent = event.label;
+    const selectCell = document.createElement("td");
+    const actionCell = document.createElement("td");
+    if (editable) {
+      const picker = createSoundPicker(
+        event.id,
+        assignments[event.id] || "",
+        files,
+      );
+      const playBtn = document.createElement("button");
+      playBtn.type = "button";
+      playBtn.className = "sound-play-btn";
+      playBtn.title = "Nghe thử";
+      playBtn.innerHTML =
+        '<svg viewBox="0 0 24 24"><path d="M8 6.5v11l9-5.5-9-5.5Z"/></svg><span>Nghe</span>';
+      playBtn.addEventListener("click", () => {
+        previewSound(picker.dataset.value);
+      });
+      selectCell.appendChild(picker);
+      actionCell.appendChild(playBtn);
+    } else {
+      selectCell.textContent = prettySoundName(assignments[event.id] || "");
+      if (!assignments[event.id]) selectCell.classList.add("muted-cell");
+    }
+    tr.append(labelCell, selectCell, actionCell);
+    body.appendChild(tr);
+  });
+}
+
+async function saveSoundAssignments() {
+  if (!can("siren")) return;
+  const sounds = {};
+  SOUND_EVENTS.forEach((event) => {
+    const picker = document.querySelector(
+      `.sound-picker[data-event="${event.id}"]`,
+    );
+    sounds[event.id] = picker ? picker.dataset.value || "" : "";
+  });
+  const res = await fetch("/api/sounds", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sounds }),
+  });
+  const data = await res.json();
+  if (!res.ok || !data.success) {
+    alert((data && data.error) || "Lưu âm thanh thất bại");
+    return;
+  }
+  appConfig.sounds = data.sounds || sounds;
+  appConfig.soundFiles = data.soundFiles || appConfig.soundFiles;
+  logMessage("Đã lưu âm thanh thông báo");
+}
+
 function unlockAudio() {
   if (audioUnlocked || !audioPlayer) return Promise.resolve();
+  const file =
+    assignedSound("emergency") ||
+    assignedSound("gas") ||
+    (appConfig.soundFiles && appConfig.soundFiles[0]) ||
+    "";
+  if (file && !audioPlayer.src) audioPlayer.src = soundUrl(file);
+  if (!audioPlayer.src) return Promise.resolve();
   audioPlayer.volume = 0;
   return audioPlayer
     .play()
@@ -848,79 +1046,12 @@ async function loadConfig() {
   appConfig = await res.json();
   currentUser = appConfig.me || null;
   mealSchedule = appConfig.mealSchedule || [];
+  appConfig.sounds = appConfig.sounds || {};
+  appConfig.soundFiles = appConfig.soundFiles || [];
   syncUserChrome();
   renderCameras();
   renderMealSchedule();
-}
-
-async function loadUsers() {
-  if (!can("users")) return;
-  const res = await fetch("/api/users");
-  if (!res.ok) return;
-  const data = await res.json();
-  userList = data.users || [];
-  renderUserTable();
-}
-
-function renderUserTable() {
-  const body = document.getElementById("user-table-body");
-  if (!body) return;
-  body.innerHTML = "";
-  userList.forEach((user) => {
-    const tr = document.createElement("tr");
-    if (user.enabled === false) tr.classList.add("disabled");
-    tr.innerHTML = `
-            <td></td>
-            <td></td>
-            <td><span class="role-pill role-${user.role}"></span></td>
-            <td><button type="button" class="text-btn">Sửa</button></td>
-        `;
-    tr.children[0].textContent = user.name;
-    tr.children[1].textContent = user.username;
-    tr.querySelector(".role-pill").textContent =
-      ROLE_LABELS[user.role] || user.role;
-    tr.querySelector("button").addEventListener("click", () =>
-      openUserModal(user),
-    );
-    body.appendChild(tr);
-  });
-}
-
-function openUserModal(existing) {
-  if (!can("users")) return;
-  const form = document.getElementById("user-form");
-  const modal = document.getElementById("user-modal");
-  form.dataset.editId = existing ? existing.id : "";
-  document.getElementById("user-modal-title").textContent = existing
-    ? "Sửa tài khoản"
-    : "Thêm tài khoản";
-  document.getElementById("user-name").value = existing ? existing.name : "";
-  document.getElementById("user-username").value = existing
-    ? existing.username
-    : "";
-  document.getElementById("user-username").disabled = Boolean(existing);
-  document.getElementById("user-role").value = existing
-    ? existing.role
-    : "viewer";
-  document.getElementById("user-password").value = "";
-  document.getElementById("user-password").required = !existing;
-  document
-    .getElementById("user-pass-label")
-    .querySelector("input").placeholder = existing
-    ? "Để trống nếu giữ mật khẩu cũ"
-    : "Ít nhất 3 ký tự";
-  document.getElementById("user-enabled").checked = existing
-    ? existing.enabled !== false
-    : true;
-  document
-    .getElementById("user-modal-delete")
-    .classList.toggle("hidden", !existing || existing.id === currentUser.id);
-  modal.classList.remove("hidden");
-  userMenu.classList.add("hidden");
-}
-
-function closeUserModal() {
-  document.getElementById("user-modal").classList.add("hidden");
+  renderSoundSettings();
 }
 
 function openMobileSidebar() {
@@ -969,6 +1100,7 @@ document.addEventListener("click", (e) => {
   if (!userMenu.contains(e.target) && e.target.id !== "btn-user") {
     userMenu.classList.add("hidden");
   }
+  if (!e.target.closest(".sound-picker")) closeSoundPickers();
 });
 
 const emergencyPopup = document.getElementById("emergency-popup");
@@ -997,6 +1129,7 @@ function sendEmergencyAlert() {
 }
 
 function showEmergencyPopup(data) {
+  const title = (data && data.title) || "Cảnh báo khẩn cấp";
   const message = (data && data.message) || "Bình gas đang di chuyển";
   const when =
     data && data.timestamp
@@ -1006,21 +1139,19 @@ function showEmergencyPopup(data) {
           second: "2-digit",
         })
       : "";
+  document.getElementById("emergency-title").textContent = title;
   document.getElementById("emergency-text").textContent = message;
   document.getElementById("emergency-time").textContent = when
     ? `Lúc ${when}`
     : "";
   emergencyPopup.classList.remove("hidden");
-  logMessage(message, true);
-  if (isSystemActive) {
-    audioPlayer.currentTime = 0;
-    audioPlayer.volume = 1;
-    audioPlayer.play().catch(() => unlockAudio());
-  }
+  logMessage(`${title}: ${message}`, true);
+  playAlertSound((data && data.kind) || "emergency");
 }
 
 function ackEmergencyPopup() {
   emergencyPopup.classList.add("hidden");
+  stopPreviewSound();
   if (alarmBanner.classList.contains("hidden")) {
     audioPlayer.pause();
     audioPlayer.currentTime = 0;
@@ -1038,9 +1169,19 @@ socket.on("EMERGENCY_ALERT", (data) => {
   showEmergencyPopup(data);
 });
 
+socket.on("SCHEDULED_ALERT", (data) => {
+  showEmergencyPopup(data);
+});
+
 socket.on("MEAL_SCHEDULE_UPDATED", (data) => {
   mealSchedule = (data && data.mealSchedule) || mealSchedule;
   renderMealSchedule();
+});
+
+socket.on("SOUNDS_UPDATED", (data) => {
+  appConfig.sounds = (data && data.sounds) || appConfig.sounds;
+  appConfig.soundFiles = (data && data.soundFiles) || appConfig.soundFiles;
+  renderSoundSettings();
 });
 
 document
@@ -1052,66 +1193,6 @@ document.getElementById("btn-logout").addEventListener("click", async () => {
     await fetch("/api/logout", { method: "POST" });
   } catch (err) {}
   window.location.href = "/login.html";
-});
-
-document
-  .getElementById("btn-add-user")
-  .addEventListener("click", () => openUserModal(null));
-document
-  .getElementById("user-modal-cancel")
-  .addEventListener("click", closeUserModal);
-document.getElementById("user-modal").addEventListener("click", (e) => {
-  if (e.target.id === "user-modal") closeUserModal();
-});
-document
-  .getElementById("user-modal-delete")
-  .addEventListener("click", async () => {
-    const editId = document.getElementById("user-form").dataset.editId;
-    if (!editId) return;
-    if (!confirm("Xóa tài khoản này?")) return;
-    const res = await fetch("/api/users/" + encodeURIComponent(editId), {
-      method: "DELETE",
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      alert(data.error || "Xóa tài khoản thất bại");
-      return;
-    }
-    userList = data.users || [];
-    closeUserModal();
-    renderUserTable();
-    logMessage("Đã xóa tài khoản");
-  });
-document.getElementById("user-form").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const editId = e.currentTarget.dataset.editId;
-  const payload = {
-    name: document.getElementById("user-name").value.trim(),
-    username: document.getElementById("user-username").value.trim(),
-    role: document.getElementById("user-role").value,
-    enabled: document.getElementById("user-enabled").checked,
-  };
-  const password = document.getElementById("user-password").value;
-  if (password) payload.password = password;
-  const res = await fetch(
-    editId ? "/api/users/" + encodeURIComponent(editId) : "/api/users",
-    {
-      method: editId ? "PUT" : "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    },
-  );
-  const data = await res.json();
-  if (!res.ok) {
-    alert(data.error || "Lưu tài khoản thất bại");
-    return;
-  }
-  userList = data.users || [];
-  closeUserModal();
-  renderUserTable();
-  logMessage(
-    editId ? "Đã cập nhật tài khoản" : `Đã thêm tài khoản ${payload.username}`,
-  );
 });
 
 camSearch.addEventListener("input", () => {
@@ -1194,8 +1275,6 @@ btnStop.addEventListener("click", () => stopAlarm());
 btnStopBanner.addEventListener("click", () => stopAlarm());
 
 socket.on("ALARM_TRIGGERED", (data) => {
-  statusText.textContent = "Cảnh báo gas";
-  statusText.className = "status-danger";
   if (can("siren")) btnStop.classList.remove("hidden");
   alarmBanner.classList.remove("hidden");
   alarmBannerText.textContent = `Phát hiện bình gas (${data.sensorId})`;
@@ -1209,9 +1288,7 @@ socket.on("ALARM_TRIGGERED", (data) => {
   });
 
   if (isSystemActive) {
-    audioPlayer.currentTime = 0;
-    audioPlayer.volume = 1;
-    audioPlayer.play().catch(() => unlockAudio());
+    playAlertSound("gas");
   } else {
     logMessage("Còi chưa bật nên không tự kêu");
   }
@@ -1221,10 +1298,9 @@ socket.on("ALARM_TRIGGERED", (data) => {
 });
 
 function stopAlarm() {
+  stopPreviewSound();
   audioPlayer.pause();
   audioPlayer.currentTime = 0;
-  statusText.textContent = "An toàn";
-  statusText.className = "status-safe";
   btnStop.classList.add("hidden");
   alarmBanner.classList.add("hidden");
   players.forEach((player) => player.setAlert(false));

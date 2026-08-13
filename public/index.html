@@ -66,18 +66,6 @@
         <div class="nav-bottom">
           <button
             class="nav-btn"
-            data-view="users"
-            data-perm="users"
-            type="button"
-            title="Tài khoản"
-          >
-            <svg viewBox="0 0 24 24">
-              <circle cx="12" cy="8" r="3.2" />
-              <path d="M5.5 19c.8-3.2 3.3-5 6.5-5s5.7 1.8 6.5 5" />
-            </svg>
-          </button>
-          <button
-            class="nav-btn"
             data-view="settings"
             type="button"
             title="Cài đặt"
@@ -162,7 +150,7 @@
               <span class="avatar" id="user-avatar">QT</span>
               <span class="user-meta">
                 <strong id="user-display-name">Quản trị viên</strong>
-                <small id="status-text" class="status-safe">An toàn</small>
+                <small id="status-text" class="user-role">Quản trị viên</small>
               </span>
               <svg class="chevron" viewBox="0 0 24 24">
                 <path d="M7 10l5 5 5-5" />
@@ -283,16 +271,28 @@
 
         <section id="view-settings" class="view-panel hidden">
           <div class="panel-head">
-            <h2>Cài đặt</h2>
+            <h2>Âm thanh thông báo</h2>
           </div>
-          <div class="settings-grid">
-            <article class="settings-card" data-perm="siren">
-              <h3>Còi báo động</h3>
-              <p>Cho phép trình duyệt phát siren khi cảm biến ESP32 báo gas.</p>
-              <button type="button" class="chip" id="btn-activate-settings">
-                Bật còi báo
-              </button>
-            </article>
+          <p class="hint">
+            Chọn tiếng là tự lưu vào máy chủ. Lần sau mở lại vẫn dùng đúng file
+            đó. Bật còi mới phát được.
+          </p>
+          <div class="sound-toolbar" data-perm="siren">
+            <button type="button" class="chip" id="btn-activate-settings">
+              Bật còi báo
+            </button>
+          </div>
+          <table class="user-table sound-table">
+            <thead>
+              <tr>
+                <th>Thông báo</th>
+                <th>File âm thanh</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="sound-table-body"></tbody>
+          </table>
+          <div class="settings-grid sound-extra">
             <article class="settings-card" data-perm="cameras">
               <h3>Camera</h3>
               <p>Thêm luồng MediaMTX mới. Path phải khớp FFmpeg ingest.</p>
@@ -313,99 +313,10 @@
             </article>
           </div>
         </section>
-
-        <section id="view-users" class="view-panel hidden">
-          <div class="panel-head">
-            <h2>Tài khoản</h2>
-            <button id="btn-add-user" class="chip chip-primary" type="button">
-              Thêm tài khoản
-            </button>
-          </div>
-          <p class="hint">
-            Admin toàn quyền · Vận hành xem camera và còi · Chỉ xem thì chỉ theo
-            dõi live.
-          </p>
-          <table class="user-table">
-            <thead>
-              <tr>
-                <th>Tên</th>
-                <th>Đăng nhập</th>
-                <th>Vai trò</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody id="user-table-body"></tbody>
-          </table>
-        </section>
       </div>
     </div>
 
     <div id="sidebar-backdrop" class="sidebar-backdrop hidden"></div>
-
-    <div id="user-modal" class="modal hidden">
-      <div class="modal-card">
-        <h3 id="user-modal-title">Thêm tài khoản</h3>
-        <form id="user-form">
-          <label
-            >Tên hiển thị
-            <input
-              type="text"
-              id="user-name"
-              placeholder="Nguyễn Văn A"
-              required
-            />
-          </label>
-          <label
-            >Tên đăng nhập
-            <input
-              type="text"
-              id="user-username"
-              placeholder="vanhanh"
-              pattern="[a-zA-Z0-9_-]+"
-              required
-            />
-          </label>
-          <label
-            >Vai trò
-            <select id="user-role">
-              <option value="viewer">Chỉ xem</option>
-              <option value="operator">Vận hành</option>
-              <option value="admin">Quản trị viên</option>
-            </select>
-          </label>
-          <label id="user-pass-label"
-            >Mật khẩu
-            <input
-              type="password"
-              id="user-password"
-              placeholder="Ít nhất 3 ký tự"
-            />
-          </label>
-          <label class="check">
-            <input type="checkbox" id="user-enabled" checked />
-            Đang hoạt động
-          </label>
-          <div class="modal-actions">
-            <button
-              type="button"
-              id="user-modal-delete"
-              class="chip chip-danger hidden"
-            >
-              Xóa
-            </button>
-            <span class="modal-spacer"></span>
-            <button
-              type="button"
-              id="user-modal-cancel"
-              class="chip chip-ghost"
-            >
-              Hủy
-            </button>
-            <button type="submit" class="chip chip-primary">Lưu</button>
-          </div>
-        </form>
-      </div>
-    </div>
 
     <div id="cam-modal" class="modal hidden">
       <div class="modal-card">
@@ -477,9 +388,7 @@
       </div>
     </div>
 
-    <audio id="siren-audio" loop preload="auto">
-      <source src="siren.mp3" type="audio/mpeg" />
-    </audio>
+    <audio id="siren-audio" loop preload="auto"></audio>
 
     <script src="/socket.io/socket.io.js"></script>
     <script src="app.js"></script>

@@ -47,5 +47,11 @@
     { "day": "fri", "name1": "", "name2": "" },
     { "day": "sat", "name1": "", "name2": "" },
     { "day": "sun", "name1": "", "name2": "" }
-  ]
+  ],
+  "sounds": {
+    "gas": "hachimi.mp3",
+    "emergency": "hachimi.mp3",
+    "meal": "hachimi.mp3",
+    "home": "hachimi.mp3"
+  }
 }

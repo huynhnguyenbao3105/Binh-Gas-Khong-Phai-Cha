@@ -86,9 +86,65 @@ function normalizeUser(raw, index) {
 }
 
 const MEAL_DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
+const WEEKDAY_TO_DAY = {
+  Sun: "sun",
+  Mon: "mon",
+  Tue: "tue",
+  Wed: "wed",
+  Thu: "thu",
+  Fri: "fri",
+  Sat: "sat",
+};
+const sentScheduleSlots = new Set();
 
 function mealName(value) {
   return value ? String(value).trim().slice(0, 80) : "";
+}
+
+const SOUND_EVENTS = ["gas", "emergency", "meal", "home"];
+const SOUND_RENAMES = {
+  "con-cac_h9fXgQu.mp3": "con-cac-tran-dan.mp3",
+  "crazy-realistic-knocking-sound-troll-twitch-streamers_small.mp3":
+    "crazy-realistic-knocking-sound.mp3",
+  "nom-nom-nom_gPJiWn4.mp3": "nom-nom-nom.mp3",
+  "siren.mp3": "hachimi.mp3",
+};
+const soundsDir = path.join(__dirname, "public", "sounds");
+
+function safeSoundName(name) {
+  const base = path.basename(String(name || ""));
+  if (!/^[a-zA-Z0-9._-]+\.(mp3|wav|ogg|m4a)$/i.test(base)) return "";
+  return base;
+}
+
+function listSoundFiles() {
+  if (!fs.existsSync(soundsDir)) return [];
+  return fs
+    .readdirSync(soundsDir)
+    .map(safeSoundName)
+    .filter(Boolean)
+    .sort((a, b) => a.localeCompare(b, "en"));
+}
+
+function normalizeSoundAssignments(raw) {
+  const source = raw && typeof raw === "object" ? raw : {};
+  const files = new Set(listSoundFiles());
+  const fallback = files.has("hachimi.mp3")
+    ? "hachimi.mp3"
+    : files.has("siren.mp3")
+      ? "siren.mp3"
+      : "";
+  const out = {};
+  SOUND_EVENTS.forEach((key) => {
+    if (Object.prototype.hasOwnProperty.call(source, key) && !source[key]) {
+      out[key] = "";
+      return;
+    }
+    let name = safeSoundName(source[key]);
+    if (name && SOUND_RENAMES[name]) name = SOUND_RENAMES[name];
+    out[key] = name && files.has(name) ? name : fallback;
+  });
+  return out;
 }
 
 function normalizeMealSchedule(raw) {
@@ -102,6 +158,77 @@ function normalizeMealSchedule(raw) {
       name2: mealName(row.name2 || people[1]),
     };
   });
+}
+
+function vietnamNow() {
+  const map = {};
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Ho_Chi_Minh",
+    weekday: "short",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(new Date());
+  parts.forEach((part) => {
+    if (part.type !== "literal") map[part.type] = part.value;
+  });
+  return {
+    weekday: map.weekday,
+    day: WEEKDAY_TO_DAY[map.weekday] || "mon",
+    hour: Number(map.hour),
+    minute: Number(map.minute),
+    dateKey: `${map.year}-${map.month}-${map.day}`,
+  };
+}
+
+function todayMealDutyLabel() {
+  const now = vietnamNow();
+  const row = (config.mealSchedule || []).find((item) => item.day === now.day);
+  const names = [row && row.name1, row && row.name2]
+    .map((name) => String(name || "").trim())
+    .filter(Boolean);
+  return names.length ? names.join(", ") : "Chưa phân công";
+}
+
+function emitScheduledAlert(kind) {
+  const isMeal = kind === "meal";
+  const payload = {
+    kind,
+    title: isMeal ? "Đến giờ dọn cơm" : "Chuẩn bị về",
+    message: isMeal
+      ? `Hôm nay: ${todayMealDutyLabel()}`
+      : "Đến giờ chuẩn bị về",
+    timestamp: new Date().toISOString(),
+  };
+  io.emit("SCHEDULED_ALERT", payload);
+  console.log(`[SCHEDULE] ${payload.title} — ${payload.message}`);
+}
+
+function checkScheduledAlerts() {
+  const now = vietnamNow();
+  if (now.weekday === "Sun") return;
+  let kind = null;
+  if (now.hour === 11 && now.minute === 45) kind = "meal";
+  else if (now.hour === 17 && now.minute === 55) kind = "home";
+  if (!kind) return;
+  const key = `${now.dateKey}:${kind}`;
+  if (sentScheduleSlots.has(key)) return;
+  sentScheduleSlots.add(key);
+  Array.from(sentScheduleSlots).forEach((slot) => {
+    if (!slot.startsWith(now.dateKey)) sentScheduleSlots.delete(slot);
+  });
+  emitScheduledAlert(kind);
+}
+
+function startScheduleWatcher() {
+  checkScheduledAlerts();
+  setInterval(checkScheduledAlerts, 15000);
+  console.log(
+    "Lịch thông báo: 11:45 dọn cơm, 17:55 chuẩn bị về (T2–T7, nghỉ CN)",
+  );
 }
 
 function normalizeConfig(raw) {
@@ -133,7 +260,8 @@ function normalizeConfig(raw) {
       ? String(source.sessionSecret)
       : crypto.randomBytes(32).toString("hex");
   const mealSchedule = normalizeMealSchedule(source.mealSchedule);
-  return { cameras, users, sessionSecret, mealSchedule };
+  const sounds = normalizeSoundAssignments(source.sounds);
+  return { cameras, users, sessionSecret, mealSchedule, sounds };
 }
 
 function needsPersist(raw) {
@@ -142,6 +270,7 @@ function needsPersist(raw) {
   if (!Array.isArray(raw.users) || !raw.users.length) return true;
   if (raw.password) return true;
   if (raw.users.some((u) => u && u.password && !u.passwordHash)) return true;
+  if (!raw.sounds || typeof raw.sounds !== "object") return true;
   return false;
 }
 
@@ -156,6 +285,7 @@ function loadConfig() {
           users: created.users,
           cameras: created.cameras,
           mealSchedule: created.mealSchedule,
+          sounds: created.sounds,
         },
         null,
         2,
@@ -171,6 +301,7 @@ function loadConfig() {
       users: normalized.users,
       cameras: normalized.cameras,
       mealSchedule: normalized.mealSchedule,
+      sounds: normalized.sounds,
     };
     fs.writeFileSync(configPath, JSON.stringify(toSave, null, 2));
   }
@@ -183,6 +314,7 @@ function saveConfig() {
     users: config.users,
     cameras: config.cameras,
     mealSchedule: config.mealSchedule,
+    sounds: config.sounds,
   };
   fs.writeFileSync(configPath, JSON.stringify(toSave, null, 2));
   writeMediaMTXConfigFile();
@@ -194,6 +326,8 @@ function publicConfig(user) {
     rtspPort: 8554,
     cameras: config.cameras,
     mealSchedule: config.mealSchedule,
+    sounds: config.sounds,
+    soundFiles: listSoundFiles(),
     me: publicUser(user),
   };
 }
@@ -308,7 +442,11 @@ app.use((req, res, next) => {
     "/api/logout",
     "/siren.mp3",
   ];
-  if (PUBLIC_PATHS.includes(req.path) || req.path.startsWith("/socket.io/")) {
+  if (
+    PUBLIC_PATHS.includes(req.path) ||
+    req.path.startsWith("/socket.io/") ||
+    req.path.startsWith("/sounds/")
+  ) {
     return next();
   }
   if (req.user) return next();
@@ -375,6 +513,20 @@ app.post("/api/change-password", (req, res) => {
 
 app.get("/api/config", (req, res) => {
   res.json(publicConfig(req.user));
+});
+
+app.put("/api/sounds", requireRole("admin", "operator"), (req, res) => {
+  config.sounds = normalizeSoundAssignments(req.body && req.body.sounds);
+  saveConfig();
+  io.emit("SOUNDS_UPDATED", {
+    sounds: config.sounds,
+    soundFiles: listSoundFiles(),
+  });
+  res.json({
+    success: true,
+    sounds: config.sounds,
+    soundFiles: listSoundFiles(),
+  });
 });
 
 app.put("/api/meal-schedule", requireRole("admin", "operator"), (req, res) => {
@@ -580,6 +732,8 @@ io.on("connection", (socket) => {
         .trim()
         .slice(0, 400) || "Bình gas đang di chuyển hãy xóa dấu vết lẹ!";
     const payload = {
+      kind: "emergency",
+      title: "Cảnh báo khẩn cấp",
       userId: socket.user.id,
       username: socket.user.username,
       name: socket.user.name,
@@ -606,6 +760,7 @@ server.listen(PORT, () => {
   console.log(`Server đang chạy tại http://localhost:${PORT}`);
   console.log(`API kích hoạt: GET http://localhost:${PORT}/api/trigger`);
   startMediaMTX();
+  startScheduleWatcher();
 });
 
 function startMediaMTX() {
