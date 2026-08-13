@@ -26,7 +26,8 @@ const clockText = document.getElementById('clock-text');
 const camSearch = document.getElementById('cam-search');
 const sidebarBackdrop = document.getElementById('sidebar-backdrop');
 
-let isSystemActive = false;
+let isSystemActive = true;
+let audioUnlocked = false;
 let alarmTimeout;
 let appConfig = { webrtcPort: 8889, rtspPort: 8554, cameras: [], me: null };
 const players = new Map();
@@ -94,6 +95,7 @@ function logMessage(msg, isAlert = false) {
         alertCount += 1;
         bellBadge.textContent = String(alertCount);
         bellBadge.classList.remove('hidden');
+        document.getElementById('btn-bell')?.classList.add('has-alert');
     }
 }
 
@@ -159,8 +161,8 @@ class CameraPlayer {
                         <button type="button" class="btn-toggle" title="Kết nối">
                             <svg viewBox="0 0 24 24"><path d="M8 6.5v11l9-5.5-9-5.5Z"/></svg>
                         </button>
-                        <button type="button" class="btn-edit ${can('cameras') ? '' : 'hidden'}" title="Cài đặt camera">
-                            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 4v2M12 18v2M4.9 7.1l1.4 1.4M17.7 15.5l1.4 1.4M4.9 16.9l1.4-1.4M17.7 8.5l1.4-1.4"/></svg>
+                        <button type="button" class="btn-edit ${can('cameras') ? '' : 'hidden'}" title="Sửa camera">
+                            <svg viewBox="0 0 24 24"><path d="M12.5 5.5 18.5 11.5"/><path d="M4 20h4.5L19 9.5 14.5 5 4 15.5V20Z"/></svg>
                         </button>
                     </div>
                 </div>
@@ -589,25 +591,33 @@ function tickClock() {
 function syncSirenButtons() {
     const labelOn = 'Còi đã bật';
     const labelOff = 'Bật còi báo';
-    [btnActivate, btnActivateSettings].forEach((btn) => {
-        if (!btn) return;
-        btn.textContent = isSystemActive ? labelOn : labelOff;
-        btn.classList.toggle('on', isSystemActive);
-    });
+    if (btnActivate) {
+        btnActivate.title = isSystemActive ? labelOn : labelOff;
+        btnActivate.classList.toggle('on', isSystemActive);
+    }
+    if (btnActivateSettings) {
+        btnActivateSettings.textContent = isSystemActive ? labelOn : labelOff;
+        btnActivateSettings.classList.toggle('on', isSystemActive);
+    }
+}
+
+function unlockAudio() {
+    if (audioUnlocked || !audioPlayer) return Promise.resolve();
+    audioPlayer.volume = 0;
+    return audioPlayer.play().then(() => {
+        audioPlayer.pause();
+        audioPlayer.currentTime = 0;
+        audioPlayer.volume = 1;
+        audioUnlocked = true;
+    }).catch(() => {});
 }
 
 function toggleSiren() {
     if (!isSystemActive) {
-        audioPlayer.volume = 0;
-        audioPlayer.play().then(() => {
-            audioPlayer.pause();
-            audioPlayer.currentTime = 0;
-            audioPlayer.volume = 1;
+        unlockAudio().then(() => {
             isSystemActive = true;
             syncSirenButtons();
             logMessage('Còi báo động đã bật. Khi có gas sẽ kêu siren.');
-        }).catch(() => {
-            alert('Không phát được siren.mp3. Kiểm tra file trong thư mục public.');
         });
     } else {
         isSystemActive = false;
@@ -776,6 +786,7 @@ document.addEventListener('click', (e) => {
 document.getElementById('btn-bell').addEventListener('click', () => {
     alertCount = 0;
     bellBadge.classList.add('hidden');
+    document.getElementById('btn-bell')?.classList.remove('has-alert');
     setView('logs');
 });
 
@@ -919,7 +930,8 @@ socket.on('ALARM_TRIGGERED', (data) => {
 
     if (isSystemActive) {
         audioPlayer.currentTime = 0;
-        audioPlayer.play().catch(() => {});
+        audioPlayer.volume = 1;
+        audioPlayer.play().catch(() => unlockAudio());
     } else {
         logMessage('Còi chưa bật nên không tự kêu');
     }
@@ -943,8 +955,28 @@ tickClock();
 setInterval(tickClock, 1000);
 setView('live');
 
+function showSirenTip() {
+    const tip = document.getElementById('siren-tip');
+    if (!tip || !can('siren')) return;
+    tip.classList.remove('hidden');
+    const hide = () => tip.classList.add('hidden');
+    setTimeout(hide, 2000);
+    tip.addEventListener('click', hide, { once: true });
+    if (btnActivate) btnActivate.addEventListener('click', hide, { once: true });
+}
+
 document.addEventListener('DOMContentLoaded', () => {
-    loadConfig().catch((err) => {
+    syncSirenButtons();
+    const unlockOnce = () => {
+        unlockAudio();
+        document.removeEventListener('pointerdown', unlockOnce);
+        document.removeEventListener('keydown', unlockOnce);
+    };
+    document.addEventListener('pointerdown', unlockOnce);
+    document.addEventListener('keydown', unlockOnce);
+    loadConfig().then(() => {
+        showSirenTip();
+    }).catch((err) => {
         console.error(err);
         logMessage('Không tải được danh sách camera');
     });

@@ -73,9 +73,7 @@
           >
             <svg viewBox="0 0 24 24">
               <circle cx="12" cy="12" r="3" />
-              <path
-                d="M12 3.5v2.2M12 18.3v2.2M4.6 7.2l1.9 1.1M17.5 15.7l1.9 1.1M4.6 16.8l1.9-1.1M17.5 8.3l1.9-1.1"
-              />
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z" />
             </svg>
           </button>
         </div>
@@ -120,17 +118,33 @@
           </label>
           <div class="header-right">
             <button
-              class="icon-btn"
+              class="icon-btn btn-emergency"
               id="btn-bell"
               type="button"
-              title="Thông báo"
+              title="Thông báo khẩn cấp"
             >
               <svg viewBox="0 0 24 24">
-                <path d="M6 16V11a6 6 0 1 1 12 0v5l1.5 2H4.5L6 16Z" />
-                <path d="M10 19a2 2 0 0 0 4 0" />
+                <path d="M12 3.2 21.5 20H2.5L12 3.2Z" />
+                <path d="M12 10v4.5M12 17.2v.2" />
               </svg>
               <span id="bell-badge" class="bell-badge hidden">0</span>
             </button>
+            <div class="siren-wrap" data-perm="siren">
+              <button
+                class="icon-btn on"
+                id="btn-activate"
+                type="button"
+                title="Còi đã bật"
+              >
+                <svg viewBox="0 0 24 24">
+                  <path d="M4 10v4h3l5 4V6L7 10H4Z" />
+                  <path d="M16 9.2a3.2 3.2 0 0 1 0 5.6M18.5 7a6 6 0 0 1 0 10" />
+                </svg>
+              </button>
+              <div id="siren-tip" class="siren-tip hidden" role="status">
+                Nhớ tắt thông báo khi cần nhe
+              </div>
+            </div>
             <button class="user-chip" id="btn-user" type="button">
               <span class="avatar" id="user-avatar">QT</span>
               <span class="user-meta">
@@ -142,9 +156,6 @@
               </svg>
             </button>
             <div id="user-menu" class="dropdown hidden">
-              <button type="button" id="btn-activate" data-perm="siren">
-                Bật còi báo
-              </button>
               <button type="button" id="btn-stop" class="hidden danger">
                 Tắt còi
               </button>

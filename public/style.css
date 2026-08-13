@@ -157,6 +157,69 @@ svg {
 
 .icon-btn:hover { background: var(--bg-hover); color: var(--text); }
 .icon-btn svg { width: 18px; height: 18px; }
+.icon-btn.on {
+    color: var(--safe);
+    background: rgba(61, 214, 140, 0.16);
+}
+
+.header-right .icon-btn {
+    width: 40px;
+    height: 40px;
+}
+.header-right .icon-btn svg {
+    width: 22px;
+    height: 22px;
+}
+
+.btn-emergency {
+    color: var(--accent-2);
+}
+.btn-emergency:hover {
+    color: #fff;
+    background: rgba(255, 122, 0, 0.2);
+}
+.btn-emergency.has-alert {
+    color: var(--danger);
+    animation: pulse 1.4s infinite;
+}
+#btn-activate svg {
+    stroke-width: 1.7;
+}
+
+.siren-wrap {
+    position: relative;
+}
+
+.siren-tip {
+    position: absolute;
+    top: calc(100% + 10px);
+    right: 0;
+    z-index: 30;
+    width: max-content;
+    max-width: 220px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    background: #1f1f1f;
+    border: 1px solid var(--line);
+    color: #fff;
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1.35;
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.4);
+}
+
+.siren-tip::before {
+    content: "";
+    position: absolute;
+    top: -6px;
+    right: 14px;
+    width: 10px;
+    height: 10px;
+    background: #1f1f1f;
+    border-left: 1px solid var(--line);
+    border-top: 1px solid var(--line);
+    transform: rotate(45deg);
+}
 
 .tree-scroll {
     flex: 1;

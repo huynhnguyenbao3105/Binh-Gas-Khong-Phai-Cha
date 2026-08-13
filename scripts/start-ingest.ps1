@@ -1,5 +1,6 @@
 param(
   [string]$PublishHost = "localhost",
+  # [string]$PublishHost = "159.198.42.40",
   [int]$RtspPort = 8554,
   [int]$RestartDelaySeconds = 5
 )
@@ -7,18 +8,22 @@ param(
 $ErrorActionPreference = "Stop"
 
 # Them camera: copy 1 dong trong mang, doi Name / Path / RtspUrl.
-# Path phai khop camera tren dashboard (MediaMTX), vi du "cam", "kho".
+# CodecArgs:
+# - H.264: @("copy") — nhe CPU
+# - H.265 / cam loi copy: @("libx264", "-preset", "ultrafast", "-tune", "zerolatency", "-b:v", "1M")
 $Cameras = @(
   @{
-    Name    = "Camera 1"
-    Path    = "cam"
-    RtspUrl = "rtsp://admin:L26C6CB7@192.168.1.3:554/cam/realmonitor?channel=1&subtype=1"
+    Name      = "Camera 1"
+    Path      = "cam"
+    RtspUrl   = "rtsp://admin:L26C6CB7@192.168.1.3:554/cam/realmonitor?channel=1&subtype=1"
+    CodecArgs = @("copy")
   }
-  # @{
-  #   Name    = "Camera 2"
-  #   Path    = "kho"
-  #   RtspUrl = "rtsp://admin:L26C6CB7@192.168.1.3:554/cam/realmonitor?channel=2&subtype=1"
-  # }
+  @{
+    Name      = "Camera 2"
+    Path      = "cam2"
+    RtspUrl   = "rtsp://192.168.1.140/live/0/SUB"
+    CodecArgs = @("libx264", "-preset", "ultrafast", "-tune", "zerolatency", "-b:v", "1M")
+  }
 )
 
 $FfmpegPath = (Get-Command ffmpeg -ErrorAction SilentlyContinue).Source
@@ -48,6 +53,7 @@ foreach ($cam in $Cameras) {
     Name       = $(if ($cam.Name) { $cam.Name } else { $cam.Path })
     Path       = [string]$cam.Path
     RtspUrl    = [string]$cam.RtspUrl
+    CodecArgs  = if ($cam.CodecArgs) { $cam.CodecArgs } else { @("copy") }
     PublishUrl = "rtsp://${PublishHost}:${RtspPort}/$($cam.Path)"
   }
 }
@@ -85,13 +91,17 @@ function Start-CamIngest($state) {
     "-rtsp_transport", "tcp",
     "-i", $cam.RtspUrl,
     "-map", "0:v:0",
-    "-c:v", "copy",
+    "-c:v"
+  )
+  $ffmpegArgs += $cam.CodecArgs
+  $ffmpegArgs += @(
     "-an",
     "-f", "rtsp",
     "-rtsp_transport", "tcp",
     $cam.PublishUrl
   )
-  Write-Host ("[{0}] {1}: bat FFmpeg -> {2}" -f (Get-Date -Format "HH:mm:ss"), $cam.Name, $cam.PublishUrl) -ForegroundColor Green
+
+  Write-Host ("[{0}] {1}: bat FFmpeg -> {2} (Codec: {3})" -f (Get-Date -Format "HH:mm:ss"), $cam.Name, $cam.PublishUrl, ($cam.CodecArgs -join " ")) -ForegroundColor Green
   $state.Process = Start-Process -FilePath $FfmpegPath -ArgumentList $ffmpegArgs -NoNewWindow -PassThru
 }
 
