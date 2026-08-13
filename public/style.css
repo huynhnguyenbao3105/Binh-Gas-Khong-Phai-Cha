@@ -23,13 +23,13 @@ html, body {
     height: 100%;
     background: var(--bg);
     color: var(--text);
-    font-family: Inter, system-ui, sans-serif;
+    font-family: Quicksand, system-ui, sans-serif;
     overflow: hidden;
 }
 
 body.login-page { overflow: auto; }
 
-button, input { font-family: inherit; color: inherit; }
+button, input, select { font-family: inherit; color: inherit; }
 button { cursor: pointer; }
 .hidden { display: none !important; }
 
@@ -562,33 +562,45 @@ svg {
 .tile-actions button {
     width: 28px;
     height: 28px;
-    border: 0;
+    border: 1px solid rgba(255, 255, 255, 0.22);
     border-radius: 6px;
-    background: rgba(0, 0, 0, 0.45);
-    color: #eee;
+    background: rgba(12, 12, 12, 0.92);
+    color: #fff;
     display: grid;
     place-items: center;
 }
 
-.tile-actions button:hover { background: rgba(255, 122, 0, 0.85); }
-.tile-actions svg { width: 14px; height: 14px; }
+.tile-actions button:hover {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+}
+.tile-actions svg { width: 15px; height: 15px; stroke-width: 2; }
 
 .cam-placeholder {
     display: grid;
     place-items: center;
-    color: #3f3f3f;
-    font-size: 12px;
-    letter-spacing: 0.04em;
+    color: #9a9a9a;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    background: #121212;
+    border: 1px dashed rgba(255, 255, 255, 0.14);
 }
 
 .cam-placeholder span {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
 }
 
-.cam-placeholder svg { width: 22px; height: 22px; }
+.cam-placeholder svg {
+    width: 28px;
+    height: 28px;
+    color: #b0b0b0;
+    stroke-width: 1.8;
+}
 
 /* —— Logs / settings —— */
 .view-panel {

@@ -568,14 +568,9 @@ function setView(view) {
     document.getElementById('view-settings').classList.toggle('hidden', view !== 'settings');
     document.getElementById('view-users').classList.toggle('hidden', view !== 'users');
 
-    const liveBtns = document.querySelectorAll('.nav-btn[data-view="live"]');
     document.querySelectorAll('.nav-btn').forEach((btn) => {
         btn.classList.toggle('active', btn.dataset.view === view);
     });
-    if (view === 'live' && liveBtns[1]) {
-        liveBtns[0].classList.remove('active');
-        liveBtns[1].classList.add('active');
-    }
     if (view === 'users') loadUsers();
 }
 
