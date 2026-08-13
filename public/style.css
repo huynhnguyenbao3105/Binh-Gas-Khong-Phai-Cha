@@ -320,6 +320,9 @@ button {
     color: #94a3b8;
     font-size: 1.1rem;
     z-index: 10;
+    text-align: center;
+    padding: 1rem;
+    white-space: pre-line;
 }
 
 .status-online { color: var(--safe-color); font-size: 0.9rem; }

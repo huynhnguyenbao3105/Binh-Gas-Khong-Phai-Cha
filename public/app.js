@@ -163,23 +163,313 @@ function logMessage(msg, isAlert = false) {
 }
 
 // ==========================================
-// LOGIC CAMERA HLS (BẤT TỬ TRƯỚC TƯỜNG LỬA)
+// LOGIC CAMERA WEBRTC (WHEP) + FALLBACK HLS
 // ==========================================
 window.isCameraConnected = false;
 
-function startCamera() {
-    const videoOverlay = document.getElementById('video-overlay');
-    const camStatus = document.getElementById('cam-status');
-    const btnConnectCam = document.getElementById('btn-connect-cam');
-    const videoStream = document.getElementById('video-stream');
-    
-    // Tự động lấy URL IP hiện tại và trỏ vào port 8888 của HLS
-    const hostname = window.location.hostname;
-    const hlsUrl = 'http://' + hostname + ':8888/cam/';
+let camSession = 0;
+let camConnecting = false;
+let camPC = null;
+let whepResourceUrl = null;
+let whepTimeoutId = null;
 
-    videoOverlay.style.display = 'none';
-    
-    // Nhúng iframe đè lên thẻ video cũ
+function defaultWhepUrl() {
+    return 'http://' + window.location.hostname + ':8889/cam/whep';
+}
+
+function defaultHlsUrl() {
+    return 'http://' + window.location.hostname + ':8888/cam/';
+}
+
+function defaultWebrtcPageUrl() {
+    return 'http://' + window.location.hostname + ':8889/cam/';
+}
+
+function setCamStatus(text, className) {
+    const camStatus = document.getElementById('cam-status');
+    if (!camStatus) return;
+    camStatus.textContent = text;
+    camStatus.className = className;
+}
+
+function setCamButton(connected) {
+    const btn = document.getElementById('btn-connect-cam');
+    if (!btn) return;
+    if (connected) {
+        btn.textContent = 'Tắt Camera';
+        btn.style.backgroundColor = '#ef4444';
+    } else {
+        btn.textContent = 'Kết nối Camera';
+        btn.style.backgroundColor = '';
+    }
+}
+
+function setOverlay(text, show) {
+    const overlay = document.getElementById('video-overlay');
+    if (!overlay) return;
+    overlay.textContent = text;
+    overlay.style.display = show ? 'flex' : 'none';
+}
+
+function prefillWhepUrl() {
+    const input = document.getElementById('whep-url');
+    if (input && !input.value.trim()) {
+        input.value = defaultWhepUrl();
+        input.placeholder = defaultWhepUrl();
+    }
+}
+
+function waitIceGatheringComplete(pc, timeoutMs = 4000) {
+    return new Promise((resolve) => {
+        if (pc.iceGatheringState === 'complete') {
+            resolve();
+            return;
+        }
+        const timer = setTimeout(() => {
+            pc.removeEventListener('icegatheringstatechange', onChange);
+            resolve();
+        }, timeoutMs);
+        function onChange() {
+            if (pc.iceGatheringState === 'complete') {
+                clearTimeout(timer);
+                pc.removeEventListener('icegatheringstatechange', onChange);
+                resolve();
+            }
+        }
+        pc.addEventListener('icegatheringstatechange', onChange);
+    });
+}
+
+async function cleanupWhep() {
+    if (whepTimeoutId) {
+        clearTimeout(whepTimeoutId);
+        whepTimeoutId = null;
+    }
+
+    const pc = camPC;
+    camPC = null;
+    if (pc) {
+        try {
+            pc.getReceivers().forEach((r) => {
+                if (r.track) r.track.stop();
+            });
+            pc.close();
+        } catch (err) {
+            console.warn('PC close failed', err);
+        }
+    }
+
+    const video = document.getElementById('video-stream');
+    if (video) {
+        video.srcObject = null;
+    }
+
+    if (whepResourceUrl) {
+        const resourceUrl = whepResourceUrl;
+        whepResourceUrl = null;
+        try {
+            await fetch(resourceUrl, { method: 'DELETE' });
+        } catch (err) {
+            console.warn('WHEP DELETE failed', err);
+        }
+    }
+}
+
+function hideHlsIframe() {
+    const iframe = document.getElementById('hls-iframe');
+    if (iframe) {
+        iframe.style.display = 'none';
+        iframe.src = '';
+    }
+}
+
+function sleepMs(ms, session) {
+    return new Promise((resolve, reject) => {
+        setTimeout(() => {
+            if (session !== camSession) {
+                reject(new Error('aborted'));
+            } else {
+                resolve();
+            }
+        }, ms);
+    });
+}
+
+async function isHlsAvailable() {
+    try {
+        const res = await fetch(defaultHlsUrl() + 'index.m3u8', { cache: 'no-store' });
+        return res.ok;
+    } catch (err) {
+        return false;
+    }
+}
+
+async function startCamera() {
+    if (camConnecting || window.isCameraConnected) return;
+
+    const session = ++camSession;
+    camConnecting = true;
+    setCamButton(true);
+    setCamStatus('Connecting', 'status-connecting');
+    setOverlay('Đang kết nối WebRTC...', true);
+    hideHlsIframe();
+
+    let loggedWaiting = false;
+
+    while (session === camSession) {
+        try {
+            await startWhep(session);
+            if (session !== camSession) return;
+            setOverlay('Chưa kết nối Camera', false);
+            setCamStatus('Online (WebRTC)', 'status-online');
+            window.isCameraConnected = true;
+            camConnecting = false;
+            logMessage('Camera WebRTC đã kết nối.');
+            return;
+        } catch (err) {
+            await cleanupWhep();
+            if (session !== camSession || (err && err.message === 'aborted')) return;
+
+            console.warn('WHEP failed', err);
+
+            if (err && err.noPublisher) {
+                const publishUrl = 'rtsp://' + window.location.hostname + ':8554/cam';
+                setOverlay('Chưa có luồng camera\nĐẩy RTSP tới:\n' + publishUrl, true);
+                setCamStatus('Connecting', 'status-connecting');
+                if (!loggedWaiting) {
+                    logMessage('Chưa có publisher. Hãy đẩy RTSP tới ' + publishUrl);
+                    loggedWaiting = true;
+                }
+                try {
+                    await sleepMs(3000, session);
+                } catch (abortErr) {
+                    return;
+                }
+                continue;
+            }
+
+            logMessage('WHEP ICE lỗi, chuyển sang WebRTC player MediaMTX...');
+            await startWebrtcPageFallback();
+            return;
+        }
+    }
+}
+
+async function startWhep(session) {
+    const input = document.getElementById('whep-url');
+    const whepUrl = (input && input.value.trim()) || defaultWhepUrl();
+
+    const pc = new RTCPeerConnection({
+        iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+    });
+    camPC = pc;
+    pc.addTransceiver('video', { direction: 'recvonly' });
+
+    let settled = false;
+    let markConnected = () => {};
+    const iceConnected = new Promise((resolve, reject) => {
+        whepTimeoutId = setTimeout(() => {
+            if (!settled) {
+                settled = true;
+                reject(new Error('WHEP timeout'));
+            }
+        }, 15000);
+
+        markConnected = () => {
+            if (settled) return;
+            settled = true;
+            if (whepTimeoutId) {
+                clearTimeout(whepTimeoutId);
+                whepTimeoutId = null;
+            }
+            resolve();
+        };
+
+        pc.onconnectionstatechange = () => {
+            if (pc.connectionState === 'connected') markConnected();
+            if (pc.connectionState === 'failed' && !settled) {
+                settled = true;
+                if (whepTimeoutId) {
+                    clearTimeout(whepTimeoutId);
+                    whepTimeoutId = null;
+                }
+                reject(new Error('ICE failed'));
+            }
+        };
+
+        pc.oniceconnectionstatechange = () => {
+            const state = pc.iceConnectionState;
+            if (state === 'connected' || state === 'completed') markConnected();
+            if (state === 'failed' && !settled) {
+                settled = true;
+                if (whepTimeoutId) {
+                    clearTimeout(whepTimeoutId);
+                    whepTimeoutId = null;
+                }
+                reject(new Error('ICE failed'));
+            }
+        };
+    });
+
+    pc.ontrack = (event) => {
+        const video = document.getElementById('video-stream');
+        if (!video) return;
+        if (event.streams && event.streams[0]) {
+            video.srcObject = event.streams[0];
+        } else {
+            video.srcObject = new MediaStream([event.track]);
+        }
+        video.muted = true;
+        video.play().catch(() => {});
+        markConnected();
+    };
+
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    await waitIceGatheringComplete(pc);
+
+    if (session !== camSession) {
+        throw new Error('aborted');
+    }
+
+    const res = await fetch(whepUrl, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/sdp',
+            'Accept': 'application/sdp'
+        },
+        body: pc.localDescription.sdp
+    });
+
+    if (!res.ok) {
+        const body = await res.text().catch(() => '');
+        const err = new Error('WHEP HTTP ' + res.status);
+        err.noPublisher = res.status === 404 || /no one is publishing/i.test(body);
+        throw err;
+    }
+
+    const location = res.headers.get('Location');
+    if (location) {
+        whepResourceUrl = new URL(location, whepUrl).href;
+    }
+
+    const answerSdp = await res.text();
+    await pc.setRemoteDescription({ type: 'answer', sdp: answerSdp });
+    await iceConnected;
+
+    if (session !== camSession) {
+        throw new Error('aborted');
+    }
+}
+
+async function startWebrtcPageFallback() {
+    await cleanupWhep();
+
+    const videoStream = document.getElementById('video-stream');
+    const webrtcPageUrl = defaultWebrtcPageUrl();
+
+    setOverlay('Chưa kết nối Camera', false);
+
     let iframe = document.getElementById('hls-iframe');
     if (!iframe) {
         iframe = document.createElement('iframe');
@@ -192,50 +482,43 @@ function startCamera() {
         iframe.style.border = 'none';
         iframe.style.zIndex = '10';
         iframe.style.backgroundColor = '#000';
-        
-        videoStream.parentElement.style.position = 'relative';
-        videoStream.parentElement.appendChild(iframe);
+
+        if (videoStream) {
+            videoStream.parentElement.style.position = 'relative';
+            videoStream.parentElement.appendChild(iframe);
+        }
     }
-    
-    iframe.src = hlsUrl;
+
+    iframe.src = webrtcPageUrl;
     iframe.style.display = 'block';
 
-    camStatus.textContent = "Online";
-    camStatus.className = "status-online";
+    setCamStatus('Online (WebRTC)', 'status-online');
     window.isCameraConnected = true;
-    
-    btnConnectCam.textContent = "Tắt Camera";
-    btnConnectCam.style.backgroundColor = "#ef4444";
+    camConnecting = false;
+    setCamButton(true);
+    logMessage('Đang xem WebRTC qua MediaMTX :8889 (không dùng HLS).');
 }
 
-function stopCamera() {
-    const camStatus = document.getElementById('cam-status');
-    const btnConnectCam = document.getElementById('btn-connect-cam');
-    const iframe = document.getElementById('hls-iframe');
-    const videoOverlay = document.getElementById('video-overlay');
-    
-    if (iframe) {
-        iframe.style.display = 'none';
-        iframe.src = '';
-    }
-    
-    videoOverlay.style.display = 'flex';
-    videoOverlay.textContent = "Chưa kết nối Camera";
-
-    camStatus.textContent = "Offline";
-    camStatus.className = "status-offline";
+async function stopCamera() {
+    camSession += 1;
+    camConnecting = false;
     window.isCameraConnected = false;
 
-    btnConnectCam.textContent = "Kết nối Camera";
-    btnConnectCam.style.backgroundColor = ""; // Mặc định
+    await cleanupWhep();
+    hideHlsIframe();
+
+    setOverlay('Chưa kết nối Camera', true);
+    setCamStatus('Offline', 'status-offline');
+    setCamButton(false);
 }
 
-// Bắt sự kiện nút kết nối
 document.addEventListener('DOMContentLoaded', () => {
+    prefillWhepUrl();
+
     const btnConnectCam = document.getElementById('btn-connect-cam');
     if (btnConnectCam) {
         btnConnectCam.addEventListener('click', () => {
-            if (window.isCameraConnected) {
+            if (window.isCameraConnected || camConnecting) {
                 stopCamera();
             } else {
                 startCamera();
@@ -243,9 +526,8 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Tự động bật camera sau 1s
     setTimeout(() => {
-        if (!window.isCameraConnected) {
+        if (!window.isCameraConnected && !camConnecting) {
             startCamera();
         }
     }, 1000);

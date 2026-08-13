@@ -145,23 +145,35 @@ function startMediaMTX() {
             console.log('✅ Tải và giải nén MediaMTX thành công!');
             
             const ymlPath = path.join(binDir, 'mediamtx.yml');
-            let ymlConfig = "";
-            if (process.env.VPS_MODE === 'true') {
-                ymlConfig = `
+            fs.writeFileSync(ymlPath, buildMediaMTXConfig());
+            runMediaMTX(mtxExe, binDir);
+        });
+    }
+}
+
+function buildMediaMTXConfig() {
+    const webrtcBlock = `webrtcAddress: :8889
+webrtcEncryption: no
+webrtcAllowOrigin: '*'
+webrtcLocalUDPAddress: :8189
+webrtcLocalTCPAddress: :8189
+webrtcIPsFromInterfaces: no
+webrtcAdditionalHosts: [159.198.42.40]
+webrtcICEServers2:
+  - url: stun:stun.l.google.com:19302
+`;
+    if (process.env.VPS_MODE === 'true') {
+        return `${webrtcBlock}webrtcICEHostNAT1To1IPs: [159.198.42.40]
+
 paths:
   cam:
 `;
-            } else {
-                ymlConfig = `
+    }
+    return `${webrtcBlock}
 paths:
   cam:
     source: rtsp://admin:L26C6CB7@192.168.1.3:554/cam/realmonitor?channel=1&subtype=1
 `;
-            }
-            fs.writeFileSync(ymlPath, ymlConfig);
-            runMediaMTX(mtxExe, binDir);
-        });
-    }
 }
 
 function runMediaMTX(exePath, cwd) {
