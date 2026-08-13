@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NoName</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Roboto:wght@300;400;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🐍 CẢM BIẾN BÌNH GAS</h1>
+            <p id="status-text" class="status-safe">CHƯA PHÁT HIỆN BÌNH GAS</p>
+        </header>
+
+        <main>
+            <div class="control-panel">
+                <h2>BẢNG ĐIỀU KHIỂN</h2>
+                <button id="btn-activate" class="btn-primary">🔊 BẬT ÂM THANH</button>
+                <button id="btn-stop" class="btn-danger hidden">🔕 TẮT CÒI</button>
+                <button id="btn-change-pass" class="btn-small" style="width: 100%; margin-top: 10px;">🔑 Đổi Mật Khẩu</button>
+            </div>
+
+            <div class="camera-panel">
+                <div class="camera-header">
+                    <h2>CCTV TRỰC TIẾP <span id="cam-status" class="status-offline">Offline</span></h2>
+                </div>
+                <div class="camera-controls">
+                    <input type="text" id="whep-url" placeholder="Đang tự động nhận diện..." title="Nhập URL WHEP của luồng stream trên MediaMTX">
+                    <button id="btn-connect-cam" class="btn-small">Kết nối Camera</button>
+                </div>
+                <div class="video-container" id="video-container">
+                    <video id="video-stream" autoplay muted playsinline></video>
+                    <div class="video-overlay" id="video-overlay">Chưa kết nối Camera</div>
+                </div>
+            </div>
+
+            <div class="log-panel">
+                <div class="log-header">
+                    <h2>LỊCH SỬ</h2>
+                    <button id="btn-clear-log" class="btn-small">Xóa Log</button>
+                </div>
+                <ul id="log-list">
+                    <li>Hệ thống sẵn sàng hoạt động...</li>
+                </ul>
+            </div>
+        </main>
+    </div>
+
+    <!-- Thẻ âm thanh ẩn (bạn cần bỏ file siren.mp3 vào thư mục public) -->
+    <audio id="siren-audio" loop preload="auto">
+        <source src="siren.mp3" type="audio/mpeg">
+        Trình duyệt của bạn không hỗ trợ thẻ audio.
+    </audio>
+
+    <!-- Import Socket.io Client -->
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>

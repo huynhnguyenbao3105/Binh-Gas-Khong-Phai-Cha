@@ -1,0 +1,5 @@
+
+paths:
+  # Chế độ VPS: Không tự động kéo, mà há miệng đợi luồng RTSP bắn lên path /cam
+  cam:
+webrtcICEHostNAT1To1IPs: [159.198.42.40]

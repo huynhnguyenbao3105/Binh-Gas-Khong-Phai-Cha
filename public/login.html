@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NoName</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Roboto:wght@300;400;700&display=swap" rel="stylesheet">
+    <style>
+        .login-box {
+            text-align: center;
+            max-width: 400px;
+            margin: auto;
+        }
+        input {
+            width: 100%;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            border-radius: 8px;
+            border: 1px solid rgba(255,255,255,0.2);
+            background: rgba(0,0,0,0.5);
+            color: white;
+            font-size: 1.1rem;
+            text-align: center;
+        }
+        input:focus {
+            outline: none;
+            border-color: #10b981;
+        }
+    </style>
+</head>
+<body>
+    <div class="container login-box" style="padding: 2rem; max-width: 300px;">
+        <input type="password" id="pass-input" placeholder="••••••••" autofocus style="margin-bottom: 0;">
+        <p id="error-msg" style="color: #ef4444; margin-top: 1rem; display: none;">Sai mật khẩu!</p>
+    </div>
+
+    <script>
+        const passInput = document.getElementById('pass-input');
+        const errorMsg = document.getElementById('error-msg');
+
+        async function login() {
+            const pass = passInput.value;
+            const res = await fetch('/api/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ password: pass })
+            });
+            const data = await res.json();
+            if (data.success) {
+                // Lưu cookie 1 năm
+                document.cookie = `auth_token=${pass}; max-age=31536000; path=/`;
+                window.location.href = '/';
+            } else {
+                errorMsg.style.display = 'block';
+            }
+        }
+
+        passInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') login();
+        });
+    </script>
+</body>
+</html>
