@@ -1,3 +1,21 @@
 {
-  "password": "change-me"
+  "password": "change-me",
+  "cameras": [
+    {
+      "id": "cam",
+      "name": "Sân trước",
+      "enabled": true,
+      "autoConnect": true,
+      "path": "cam",
+      "sensorIds": ["esp32-1"]
+    },
+    {
+      "id": "kho",
+      "name": "Kho gas",
+      "enabled": true,
+      "autoConnect": true,
+      "path": "kho",
+      "sensorIds": ["esp32-2"]
+    }
+  ]
 }
