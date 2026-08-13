@@ -126,23 +126,32 @@ function listSoundFiles() {
     .sort((a, b) => a.localeCompare(b, "en"));
 }
 
+function resolveSoundName(name) {
+  let file = safeSoundName(name);
+  if (file && SOUND_RENAMES[file]) file = SOUND_RENAMES[file];
+  return file;
+}
+
+function normalizeSoundList(value, files) {
+  const raw = Array.isArray(value) ? value : value ? [value] : [];
+  const seen = new Set();
+  const list = [];
+  raw.forEach((item) => {
+    const file = resolveSoundName(item);
+    if (file && files.has(file) && !seen.has(file)) {
+      seen.add(file);
+      list.push(file);
+    }
+  });
+  return list;
+}
+
 function normalizeSoundAssignments(raw) {
   const source = raw && typeof raw === "object" ? raw : {};
   const files = new Set(listSoundFiles());
-  const fallback = files.has("hachimi.mp3")
-    ? "hachimi.mp3"
-    : files.has("siren.mp3")
-      ? "siren.mp3"
-      : "";
   const out = {};
   SOUND_EVENTS.forEach((key) => {
-    if (Object.prototype.hasOwnProperty.call(source, key) && !source[key]) {
-      out[key] = "";
-      return;
-    }
-    let name = safeSoundName(source[key]);
-    if (name && SOUND_RENAMES[name]) name = SOUND_RENAMES[name];
-    out[key] = name && files.has(name) ? name : fallback;
+    out[key] = normalizeSoundList(source[key], files);
   });
   return out;
 }
@@ -271,6 +280,13 @@ function needsPersist(raw) {
   if (raw.password) return true;
   if (raw.users.some((u) => u && u.password && !u.passwordHash)) return true;
   if (!raw.sounds || typeof raw.sounds !== "object") return true;
+  if (
+    SOUND_EVENTS.some(
+      (key) => raw.sounds[key] != null && !Array.isArray(raw.sounds[key]),
+    )
+  ) {
+    return true;
+  }
   return false;
 }
 

@@ -684,8 +684,17 @@ function soundUrl(file) {
   return "/sounds/" + encodeURIComponent(file);
 }
 
-function assignedSound(kind) {
-  return (appConfig.sounds && appConfig.sounds[kind]) || "";
+function assignedSounds(kind) {
+  const value = appConfig.sounds && appConfig.sounds[kind];
+  if (Array.isArray(value)) return value.filter(Boolean);
+  return value ? [value] : [];
+}
+
+function pickSound(kind) {
+  const list = assignedSounds(kind);
+  if (!list.length) return "";
+  if (list.length === 1) return list[0];
+  return list[Math.floor(Math.random() * list.length)];
 }
 
 function stopPreviewSound() {
@@ -697,7 +706,7 @@ function stopPreviewSound() {
 
 function playAlertSound(kind) {
   if (!isSystemActive || !audioPlayer) return;
-  const file = assignedSound(kind);
+  const file = pickSound(kind);
   if (!file) return;
   stopPreviewSound();
   audioPlayer.src = soundUrl(file);
@@ -737,20 +746,56 @@ function closeSoundPickers(except) {
   });
 }
 
-function setSoundPickerValue(picker, value) {
-  picker.dataset.value = value || "";
+function getPickerValues(picker) {
+  try {
+    const list = JSON.parse(picker.dataset.values || "[]");
+    return Array.isArray(list) ? list.filter(Boolean) : [];
+  } catch (err) {
+    return [];
+  }
+}
+
+function soundPickerLabel(list) {
+  if (!list.length) return "Không phát";
+  if (list.length === 1) return prettySoundName(list[0]);
+  return `${list.length} âm thanh · random`;
+}
+
+function setSoundPickerValues(picker, values) {
+  const list = Array.from(new Set((values || []).filter(Boolean)));
+  picker.dataset.values = JSON.stringify(list);
   const label = picker.querySelector(".sound-picker-btn span");
-  if (label) label.textContent = prettySoundName(value);
+  if (label) label.textContent = soundPickerLabel(list);
   picker.querySelectorAll(".sound-option").forEach((btn) => {
-    btn.classList.toggle("active", (btn.dataset.value || "") === (value || ""));
+    const value = btn.dataset.value || "";
+    const active = value ? list.includes(value) : list.length === 0;
+    btn.classList.toggle("active", active);
   });
+}
+
+function toggleSoundPickerValue(picker, value) {
+  if (!value) {
+    setSoundPickerValues(picker, []);
+    saveSoundAssignments();
+    return;
+  }
+  const list = getPickerValues(picker);
+  const next = list.includes(value)
+    ? list.filter((item) => item !== value)
+    : list.concat(value);
+  setSoundPickerValues(picker, next);
+  saveSoundAssignments();
 }
 
 function createSoundPicker(eventId, selected, files) {
   const picker = document.createElement("div");
   picker.className = "sound-picker";
   picker.dataset.event = eventId;
-  picker.dataset.value = selected || "";
+  const selectedList = Array.isArray(selected)
+    ? selected
+    : selected
+      ? [selected]
+      : [];
 
   const btn = document.createElement("button");
   btn.type = "button";
@@ -769,27 +814,37 @@ function createSoundPicker(eventId, selected, files) {
     files.map((file) => ({ value: file, label: prettySoundName(file) })),
   );
   options.forEach((item) => {
-    const opt = document.createElement("button");
-    opt.type = "button";
+    const opt = document.createElement("div");
     opt.className = "sound-option";
     opt.dataset.value = item.value;
-    opt.textContent = item.label;
+    const mark = document.createElement("i");
+    mark.className = "sound-check";
+    const text = document.createElement("span");
+    text.textContent = item.label;
+    opt.append(mark, text);
     if (item.value) {
-      const ext = document.createElement("small");
-      ext.textContent = item.value.split(".").pop().toUpperCase();
-      opt.appendChild(ext);
+      const play = document.createElement("button");
+      play.type = "button";
+      play.className = "sound-option-play";
+      play.title = "Nghe thử";
+      play.innerHTML =
+        '<svg viewBox="0 0 24 24"><path d="M8 6.5v11l9-5.5-9-5.5Z"/></svg>';
+      play.addEventListener("click", (e) => {
+        e.stopPropagation();
+        previewSound(item.value);
+      });
+      opt.appendChild(play);
     }
     opt.addEventListener("click", (e) => {
       e.stopPropagation();
-      setSoundPickerValue(picker, item.value);
-      picker.classList.remove("open");
-      saveSoundAssignments();
+      toggleSoundPickerValue(picker, item.value);
+      if (!item.value) picker.classList.remove("open");
     });
     menu.appendChild(opt);
   });
 
   picker.append(btn, menu);
-  setSoundPickerValue(picker, selected);
+  setSoundPickerValues(picker, selectedList);
   return picker;
 }
 
@@ -809,7 +864,7 @@ function renderSoundSettings() {
     if (editable) {
       const picker = createSoundPicker(
         event.id,
-        assignments[event.id] || "",
+        assignments[event.id] || [],
         files,
       );
       const playBtn = document.createElement("button");
@@ -819,13 +874,24 @@ function renderSoundSettings() {
       playBtn.innerHTML =
         '<svg viewBox="0 0 24 24"><path d="M8 6.5v11l9-5.5-9-5.5Z"/></svg><span>Nghe</span>';
       playBtn.addEventListener("click", () => {
-        previewSound(picker.dataset.value);
+        const list = getPickerValues(picker);
+        if (!list.length) return;
+        previewSound(
+          list.length === 1
+            ? list[0]
+            : list[Math.floor(Math.random() * list.length)],
+        );
       });
       selectCell.appendChild(picker);
       actionCell.appendChild(playBtn);
     } else {
-      selectCell.textContent = prettySoundName(assignments[event.id] || "");
-      if (!assignments[event.id]) selectCell.classList.add("muted-cell");
+      const list = Array.isArray(assignments[event.id])
+        ? assignments[event.id]
+        : assignments[event.id]
+          ? [assignments[event.id]]
+          : [];
+      selectCell.textContent = soundPickerLabel(list);
+      if (!list.length) selectCell.classList.add("muted-cell");
     }
     tr.append(labelCell, selectCell, actionCell);
     body.appendChild(tr);
@@ -839,7 +905,7 @@ async function saveSoundAssignments() {
     const picker = document.querySelector(
       `.sound-picker[data-event="${event.id}"]`,
     );
-    sounds[event.id] = picker ? picker.dataset.value || "" : "";
+    sounds[event.id] = picker ? getPickerValues(picker) : [];
   });
   const res = await fetch("/api/sounds", {
     method: "PUT",
@@ -859,8 +925,8 @@ async function saveSoundAssignments() {
 function unlockAudio() {
   if (audioUnlocked || !audioPlayer) return Promise.resolve();
   const file =
-    assignedSound("emergency") ||
-    assignedSound("gas") ||
+    pickSound("emergency") ||
+    pickSound("gas") ||
     (appConfig.soundFiles && appConfig.soundFiles[0]) ||
     "";
   if (file && !audioPlayer.src) audioPlayer.src = soundUrl(file);
