@@ -1,6 +1,6 @@
 param(
-  [string]$PublishHost = "localhost",
-  # [string]$PublishHost = "159.198.42.40",
+  # [string]$PublishHost = "localhost",
+  [string]$PublishHost = "159.198.42.40",
   [int]$RtspPort = 8554,
   [int]$RestartDelaySeconds = 5
 )
