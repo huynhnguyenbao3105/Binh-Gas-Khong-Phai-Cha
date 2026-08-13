@@ -13,11 +13,7 @@ const ROLE_LABELS = {
 const logList = document.getElementById("log-list");
 const btnClearLog = document.getElementById("btn-clear-log");
 const btnChangePass = document.getElementById("btn-change-pass");
-const btnChangePassSettings = document.getElementById(
-  "btn-change-pass-settings",
-);
 const btnAddCam = document.getElementById("btn-add-cam");
-const btnAddCamSettings = document.getElementById("btn-add-cam-settings");
 const cameraGrid = document.getElementById("camera-grid");
 const camTree = document.getElementById("cam-tree");
 const camModal = document.getElementById("cam-modal");
@@ -106,6 +102,10 @@ function syncUserChrome() {
   if (nameEl) nameEl.textContent = currentUser.name || currentUser.username;
   if (avatarEl)
     avatarEl.textContent = initials(currentUser.name || currentUser.username);
+  const usernameInput = document.getElementById("account-username");
+  if (usernameInput && !usernameInput.matches(":focus")) {
+    usernameInput.value = currentUser.username || "";
+  }
   const roleEl = document.getElementById("status-text");
   if (roleEl) {
     roleEl.textContent =
@@ -961,23 +961,47 @@ function toggleSiren() {
   }
 }
 
-async function changePassword() {
-  const currentPassword = prompt("Mật khẩu hiện tại:");
-  if (currentPassword == null) return;
-  const newPass = prompt("Mật khẩu mới:");
-  if (!newPass) return;
+function openAccountSettings() {
+  userMenu.classList.add("hidden");
+  const modal = document.getElementById("account-modal");
+  const input = document.getElementById("account-username");
+  const current = document.getElementById("account-current");
+  const next = document.getElementById("account-new");
+  if (input) input.value = (currentUser && currentUser.username) || "";
+  if (current) current.value = "";
+  if (next) next.value = "";
+  modal.classList.remove("hidden");
+  input?.focus();
+  input?.select();
+}
+
+function closeAccountSettings() {
+  document.getElementById("account-modal").classList.add("hidden");
+}
+
+async function saveAccount(e) {
+  e.preventDefault();
+  const username = document.getElementById("account-username").value.trim();
+  const currentPassword = document.getElementById("account-current").value;
+  const newPassword = document.getElementById("account-new").value;
   try {
-    const res = await fetch("/api/change-password", {
-      method: "POST",
+    const res = await fetch("/api/me", {
+      method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ currentPassword, newPassword: newPass }),
+      body: JSON.stringify({ username, currentPassword, newPassword }),
     });
     const data = await res.json();
-    if (data.success) {
-      alert("Đổi mật khẩu thành công");
-    } else {
-      alert(data.error || "Đổi mật khẩu thất bại");
+    if (!data.success) {
+      alert(data.error || "Lưu tài khoản thất bại");
+      return;
     }
+    currentUser = data.user || currentUser;
+    if (appConfig) appConfig.me = currentUser;
+    document.getElementById("account-current").value = "";
+    document.getElementById("account-new").value = "";
+    syncUserChrome();
+    closeAccountSettings();
+    logMessage("Đã cập nhật tài khoản");
   } catch (err) {
     alert("Lỗi kết nối máy chủ");
   }
@@ -1267,7 +1291,6 @@ camSearch.addEventListener("input", () => {
 });
 
 btnAddCam.addEventListener("click", () => openCamModal(null));
-btnAddCamSettings.addEventListener("click", () => openCamModal(null));
 document
   .getElementById("cam-modal-cancel")
   .addEventListener("click", closeCamModal);
@@ -1330,8 +1353,14 @@ camForm.addEventListener("submit", async (e) => {
   logMessage(editId ? "Đã cập nhật camera" : `Đã thêm camera ${payload.name}`);
 });
 
-btnChangePass.addEventListener("click", changePassword);
-btnChangePassSettings.addEventListener("click", changePassword);
+btnChangePass.addEventListener("click", openAccountSettings);
+document.getElementById("account-form").addEventListener("submit", saveAccount);
+document
+  .getElementById("account-modal-cancel")
+  .addEventListener("click", closeAccountSettings);
+document.getElementById("account-modal").addEventListener("click", (e) => {
+  if (e.target.id === "account-modal") closeAccountSettings();
+});
 btnClearLog.addEventListener("click", () => {
   logList.innerHTML = "";
 });

@@ -505,14 +505,24 @@ app.get("/api/me", (req, res) => {
 });
 
 app.post("/api/change-password", (req, res) => {
-  const currentPassword = String((req.body && req.body.currentPassword) || "");
-  const newPass = String((req.body && req.body.newPassword) || "");
-  if (newPass.length < 3) {
-    return res.json({
-      success: false,
-      error: "Mật khẩu mới tối thiểu 3 ký tự",
-    });
+  updateOwnAccount(req, res);
+});
+
+app.put("/api/me", (req, res) => {
+  updateOwnAccount(req, res);
+});
+
+function updateOwnAccount(req, res) {
+  if (!req.user) {
+    return res.status(401).json({ success: false, error: "Unauthorized" });
   }
+  const body = req.body || {};
+  const currentPassword = String(body.currentPassword || "");
+  const newPass = String(body.newPassword || body.password || "");
+  const nextUsername = sanitizeId(
+    body.username || req.user.username,
+    req.user.username,
+  ).toLowerCase();
   let match = false;
   try {
     match = bcrypt.compareSync(currentPassword, req.user.passwordHash);
@@ -522,10 +532,25 @@ app.post("/api/change-password", (req, res) => {
   if (!match) {
     return res.json({ success: false, error: "Mật khẩu hiện tại không đúng" });
   }
-  req.user.passwordHash = hashPassword(newPass);
+  if (newPass && newPass.length < 3) {
+    return res.json({
+      success: false,
+      error: "Mật khẩu mới tối thiểu 3 ký tự",
+    });
+  }
+  if (
+    nextUsername !== req.user.username &&
+    config.users.some(
+      (u) => u.id !== req.user.id && u.username === nextUsername,
+    )
+  ) {
+    return res.json({ success: false, error: "Tên đăng nhập đã được dùng" });
+  }
+  req.user.username = nextUsername;
+  if (newPass) req.user.passwordHash = hashPassword(newPass);
   saveConfig();
-  res.json({ success: true });
-});
+  res.json({ success: true, user: publicUser(req.user) });
+}
 
 app.get("/api/config", (req, res) => {
   res.json(publicConfig(req.user));

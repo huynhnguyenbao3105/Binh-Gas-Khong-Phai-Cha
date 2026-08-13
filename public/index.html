@@ -163,7 +163,7 @@
               <button type="button" id="btn-add-cam" data-perm="cameras">
                 Thêm camera
               </button>
-              <button type="button" id="btn-change-pass">Đổi mật khẩu</button>
+              <button type="button" id="btn-change-pass">Tài khoản</button>
               <button type="button" id="btn-logout">Đăng xuất</button>
             </div>
           </div>
@@ -292,31 +292,62 @@
             </thead>
             <tbody id="sound-table-body"></tbody>
           </table>
-          <div class="settings-grid sound-extra">
-            <article class="settings-card" data-perm="cameras">
-              <h3>Camera</h3>
-              <p>Thêm luồng MediaMTX mới. Path phải khớp FFmpeg ingest.</p>
-              <button
-                type="button"
-                class="chip chip-primary"
-                id="btn-add-cam-settings"
-              >
-                Thêm camera
-              </button>
-            </article>
-            <article class="settings-card">
-              <h3>Mật khẩu</h3>
-              <p>Đổi mật khẩu tài khoản đang đăng nhập.</p>
-              <button type="button" class="chip" id="btn-change-pass-settings">
-                Đổi mật khẩu
-              </button>
-            </article>
-          </div>
         </section>
       </div>
     </div>
 
     <div id="sidebar-backdrop" class="sidebar-backdrop hidden"></div>
+
+    <div id="account-modal" class="modal hidden">
+      <div class="modal-card">
+        <h3>Tài khoản</h3>
+        <p class="hint">
+          Đổi tên đăng nhập hoặc mật khẩu. Cần mật khẩu hiện tại.
+        </p>
+        <form id="account-form">
+          <label
+            >Tên đăng nhập
+            <input
+              type="text"
+              id="account-username"
+              pattern="[a-zA-Z0-9_-]+"
+              required
+              autocomplete="username"
+            />
+          </label>
+          <label
+            >Mật khẩu hiện tại
+            <input
+              type="password"
+              id="account-current"
+              required
+              autocomplete="current-password"
+            />
+          </label>
+          <label
+            >Mật khẩu mới
+            <input
+              type="password"
+              id="account-new"
+              minlength="3"
+              placeholder="Để trống nếu giữ mật khẩu cũ"
+              autocomplete="new-password"
+            />
+          </label>
+          <div class="modal-actions">
+            <span class="modal-spacer"></span>
+            <button
+              type="button"
+              id="account-modal-cancel"
+              class="chip chip-ghost"
+            >
+              Hủy
+            </button>
+            <button type="submit" class="chip chip-primary">Lưu</button>
+          </div>
+        </form>
+      </div>
+    </div>
 
     <div id="cam-modal" class="modal hidden">
       <div class="modal-card">
