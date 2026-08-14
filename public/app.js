@@ -31,6 +31,7 @@ const sidebarBackdrop = document.getElementById("sidebar-backdrop");
 let isSystemActive = true;
 let audioUnlocked = false;
 let alarmTimeout;
+let soundCutTimeout;
 let appConfig = {
   webrtcPort: 8889,
   rtspPort: 8554,
@@ -704,19 +705,38 @@ function stopPreviewSound() {
   previewAudio = null;
 }
 
-function playAlertSound(kind) {
+function clearSoundCut() {
+  if (soundCutTimeout) {
+    clearTimeout(soundCutTimeout);
+    soundCutTimeout = null;
+  }
+}
+
+function playAlertSound(kind, options = {}) {
   if (!isSystemActive || !audioPlayer) return;
   const file = pickSound(kind);
   if (!file) return;
+  const once = options.once === true;
+  const maxMs = Number(options.maxMs) > 0 ? Number(options.maxMs) : 0;
   stopPreviewSound();
+  clearSoundCut();
   audioPlayer.src = soundUrl(file);
-  audioPlayer.loop = true;
+  audioPlayer.loop = !once;
   audioPlayer.volume = 1;
   audioPlayer.currentTime = 0;
   audioPlayer.play().catch(() => {
     audioUnlocked = false;
     unlockAudio();
   });
+  if (once && maxMs) {
+    soundCutTimeout = setTimeout(() => {
+      soundCutTimeout = null;
+      if (!audioPlayer) return;
+      audioPlayer.pause();
+      audioPlayer.currentTime = 0;
+      audioPlayer.loop = false;
+    }, maxMs);
+  }
 }
 
 function previewSound(file) {
@@ -1450,7 +1470,7 @@ socket.on("ALARM_TRIGGERED", (data) => {
   });
 
   if (isSystemActive) {
-    playAlertSound("gas");
+    playAlertSound("gas", { once: true, maxMs: 5000 });
   } else {
     logMessage("Còi chưa bật nên không tự kêu");
   }
@@ -1460,9 +1480,11 @@ socket.on("ALARM_TRIGGERED", (data) => {
 });
 
 function stopAlarm() {
+  clearSoundCut();
   stopPreviewSound();
   audioPlayer.pause();
   audioPlayer.currentTime = 0;
+  audioPlayer.loop = false;
   btnStop.classList.add("hidden");
   alarmBanner.classList.add("hidden");
   players.forEach((player) => player.setAlert(false));
