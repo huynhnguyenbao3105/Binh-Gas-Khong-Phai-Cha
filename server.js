@@ -104,9 +104,6 @@ function mealName(value) {
 const SOUND_EVENTS = ["gas", "emergency", "meal", "home"];
 const SOUND_RENAMES = {
   "con-cac_h9fXgQu.mp3": "con-cac-tran-dan.mp3",
-  "crazy-realistic-knocking-sound-troll-twitch-streamers_small.mp3":
-    "crazy-realistic-knocking-sound.mp3",
-  "nom-nom-nom_gPJiWn4.mp3": "nom-nom-nom.mp3",
   "siren.mp3": "hachimi.mp3",
 };
 const soundsDir = path.join(__dirname, "public", "sounds");
