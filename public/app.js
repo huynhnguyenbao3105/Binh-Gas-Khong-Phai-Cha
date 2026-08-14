@@ -1194,10 +1194,60 @@ document.addEventListener("click", (e) => {
 });
 
 const emergencyPopup = document.getElementById("emergency-popup");
+const EMERGENCY_COOLDOWN_MS = 30000;
 let sendingAlert = false;
+let emergencyCooldownUntil = 0;
+let emergencyCooldownTimer = null;
+
+function syncEmergencyButton() {
+  const btn = document.getElementById("btn-bell");
+  if (!btn) return;
+  const remainMs = emergencyCooldownUntil - Date.now();
+  if (remainMs > 0) {
+    const sec = Math.ceil(remainMs / 1000);
+    btn.classList.add("cooldown");
+    btn.disabled = true;
+    btn.title = `Chờ ${sec}s để gửi lại`;
+    if (bellBadge) {
+      bellBadge.textContent = String(sec);
+      bellBadge.classList.remove("hidden");
+    }
+    return;
+  }
+  btn.classList.remove("cooldown");
+  btn.disabled = false;
+  btn.title = "Thông báo khẩn cấp";
+  if (bellBadge) {
+    if (alertCount > 0) {
+      bellBadge.textContent = String(alertCount);
+      bellBadge.classList.remove("hidden");
+    } else {
+      bellBadge.classList.add("hidden");
+    }
+  }
+}
+
+function startEmergencyCooldown(ms = EMERGENCY_COOLDOWN_MS) {
+  emergencyCooldownUntil = Date.now() + ms;
+  syncEmergencyButton();
+  if (emergencyCooldownTimer) clearInterval(emergencyCooldownTimer);
+  emergencyCooldownTimer = setInterval(() => {
+    if (Date.now() >= emergencyCooldownUntil) {
+      clearInterval(emergencyCooldownTimer);
+      emergencyCooldownTimer = null;
+      syncEmergencyButton();
+      return;
+    }
+    syncEmergencyButton();
+  }, 250);
+}
 
 function sendEmergencyAlert() {
   if (sendingAlert) return;
+  if (Date.now() < emergencyCooldownUntil) {
+    syncEmergencyButton();
+    return;
+  }
   sendingAlert = true;
   alertCount = 0;
   bellBadge.classList.add("hidden");
@@ -1209,6 +1259,12 @@ function sendEmergencyAlert() {
       logMessage("Không gửi được cảnh báo. Kiểm tra kết nối.");
       return;
     }
+    if (ack && ack.success === false) {
+      if (ack.retryAfterMs) startEmergencyCooldown(ack.retryAfterMs);
+      logMessage(ack.error || "Chưa thể gửi cảnh báo khẩn cấp");
+      return;
+    }
+    startEmergencyCooldown(EMERGENCY_COOLDOWN_MS);
     const n = ack && ack.recipients ? ack.recipients : 0;
     logMessage(
       n
@@ -1217,6 +1273,8 @@ function sendEmergencyAlert() {
     );
   });
 }
+
+let emergencyHideTimer = null;
 
 function showEmergencyPopup(data) {
   const title = (data && data.title) || "Cảnh báo khẩn cấp";
@@ -1237,9 +1295,18 @@ function showEmergencyPopup(data) {
   emergencyPopup.classList.remove("hidden");
   logMessage(`${title}: ${message}`, true);
   playAlertSound((data && data.kind) || "emergency");
+  if (emergencyHideTimer) clearTimeout(emergencyHideTimer);
+  emergencyHideTimer = setTimeout(() => {
+    emergencyHideTimer = null;
+    ackEmergencyPopup();
+  }, 5000);
 }
 
 function ackEmergencyPopup() {
+  if (emergencyHideTimer) {
+    clearTimeout(emergencyHideTimer);
+    emergencyHideTimer = null;
+  }
   emergencyPopup.classList.add("hidden");
   stopPreviewSound();
   if (alarmBanner.classList.contains("hidden")) {

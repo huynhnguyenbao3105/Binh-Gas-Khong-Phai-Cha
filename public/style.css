@@ -215,6 +215,16 @@ svg {
   color: var(--danger);
   animation: pulse 1.4s infinite;
 }
+.btn-emergency.cooldown {
+  opacity: 0.45;
+  cursor: not-allowed;
+  animation: none;
+  color: var(--muted);
+}
+.btn-emergency.cooldown:hover {
+  color: var(--muted);
+  background: transparent;
+}
 #btn-activate svg {
   stroke-width: 1.7;
 }

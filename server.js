@@ -761,12 +761,28 @@ io.use((socket, next) => {
   next();
 });
 
+const EMERGENCY_COOLDOWN_MS = 30000;
+const emergencyCooldownByUser = new Map();
+
 io.on("connection", (socket) => {
   const room = "user:" + socket.user.id;
   socket.join(room);
   console.log(`Client connected: ${socket.id} (${socket.user.username})`);
 
   socket.on("EMERGENCY_ALERT", async (data, ack) => {
+    const now = Date.now();
+    const until = emergencyCooldownByUser.get(socket.user.id) || 0;
+    if (now < until) {
+      if (typeof ack === "function") {
+        ack({
+          success: false,
+          error: `Chờ ${Math.ceil((until - now) / 1000)}s để gửi lại`,
+          retryAfterMs: until - now,
+        });
+      }
+      return;
+    }
+
     const message =
       String((data && data.message) || "")
         .replace(/\s+/g, " ")
@@ -781,13 +797,18 @@ io.on("connection", (socket) => {
       message,
       timestamp: new Date().toISOString(),
     };
+    emergencyCooldownByUser.set(socket.user.id, now + EMERGENCY_COOLDOWN_MS);
     const recipients = await io.in(room).fetchSockets();
     io.to(room).emit("EMERGENCY_ALERT", payload);
     console.log(
       `[ALERT] Cảnh báo khẩn cấp từ ${socket.user.username} tới ${recipients.length} phiên`,
     );
     if (typeof ack === "function") {
-      ack({ success: true, recipients: recipients.length });
+      ack({
+        success: true,
+        recipients: recipients.length,
+        cooldownMs: EMERGENCY_COOLDOWN_MS,
+      });
     }
   });
 
