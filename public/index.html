@@ -42,17 +42,6 @@
           </button>
           <button
             class="nav-btn"
-            data-view="meals"
-            type="button"
-            title="Lịch dọn cơm"
-          >
-            <svg viewBox="0 0 24 24">
-              <rect x="3.5" y="5" width="17" height="15" rx="2" />
-              <path d="M8 3.5v3M16 3.5v3M3.5 10h17" />
-            </svg>
-          </button>
-          <button
-            class="nav-btn"
             data-view="logs"
             type="button"
             title="Nhật ký"
@@ -118,18 +107,6 @@
             />
           </label>
           <div class="header-right">
-            <button
-              class="icon-btn btn-emergency"
-              id="btn-bell"
-              type="button"
-              title="Thông báo khẩn cấp"
-            >
-              <svg viewBox="0 0 24 24">
-                <path d="M12 3.2 21.5 20H2.5L12 3.2Z" />
-                <path d="M12 10v4.5M12 17.2v.2" />
-              </svg>
-              <span id="bell-badge" class="bell-badge hidden">0</span>
-            </button>
             <div class="siren-wrap" data-perm="siren">
               <button
                 class="icon-btn on"
@@ -243,30 +220,6 @@
           <ul id="log-list">
             <li><span class="log-msg">Hệ thống sẵn sàng.</span></li>
           </ul>
-        </section>
-
-        <section id="view-meals" class="view-panel hidden">
-          <div class="panel-head">
-            <h2>Lịch dọn cơm</h2>
-            <button
-              id="btn-save-meals"
-              class="chip chip-primary hidden"
-              type="button"
-            >
-              Lưu lịch
-            </button>
-          </div>
-          <p class="hint">Mỗi ngày 2 người dọn cơm, không chia ca.</p>
-          <table class="user-table meal-table">
-            <thead>
-              <tr>
-                <th>Ngày</th>
-                <th>Người 1</th>
-                <th>Người 2</th>
-              </tr>
-            </thead>
-            <tbody id="meal-table-body"></tbody>
-          </table>
         </section>
 
         <section id="view-settings" class="view-panel hidden">
@@ -394,28 +347,6 @@
             <button type="submit" class="chip chip-primary">Lưu</button>
           </div>
         </form>
-      </div>
-    </div>
-
-    <div id="emergency-popup" class="modal emergency-overlay hidden">
-      <div
-        class="emergency-card"
-        role="alertdialog"
-        aria-labelledby="emergency-title"
-        aria-live="assertive"
-      >
-        <div class="emergency-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24">
-            <path d="M12 3.2 21.5 20H2.5L12 3.2Z" />
-            <path d="M12 10v4.5M12 17.2v.2" />
-          </svg>
-        </div>
-        <h3 id="emergency-title">Cảnh báo khẩn cấp</h3>
-        <p id="emergency-text">Bình gas đang di chuyển</p>
-        <p id="emergency-time" class="hint"></p>
-        <button type="button" id="emergency-ack" class="chip chip-danger">
-          Đã nhận
-        </button>
       </div>
     </div>
 

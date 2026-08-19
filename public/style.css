@@ -204,27 +204,6 @@ svg {
   height: 22px;
 }
 
-.btn-emergency {
-  color: var(--accent-2);
-}
-.btn-emergency:hover {
-  color: #fff;
-  background: rgba(255, 122, 0, 0.2);
-}
-.btn-emergency.has-alert {
-  color: var(--danger);
-  animation: pulse 1.4s infinite;
-}
-.btn-emergency.cooldown {
-  opacity: 0.45;
-  cursor: not-allowed;
-  animation: none;
-  color: var(--muted);
-}
-.btn-emergency.cooldown:hover {
-  color: var(--muted);
-  background: transparent;
-}
 #btn-activate svg {
   stroke-width: 1.7;
 }
@@ -407,22 +386,6 @@ svg {
   gap: 8px;
   margin-left: auto;
   position: relative;
-}
-
-.bell-badge {
-  position: absolute;
-  top: 4px;
-  right: 4px;
-  min-width: 14px;
-  height: 14px;
-  padding: 0 3px;
-  border-radius: 99px;
-  background: var(--accent);
-  color: #fff;
-  font-size: 9px;
-  font-weight: 700;
-  display: grid;
-  place-items: center;
 }
 
 .user-chip {
@@ -1128,71 +1091,6 @@ svg {
   line-height: 1.45;
 }
 
-.emergency-overlay {
-  z-index: 80;
-  background: rgba(40, 0, 0, 0.72);
-}
-
-.emergency-card {
-  width: min(440px, 100%);
-  text-align: center;
-  background: #1a1010;
-  border: 1px solid rgba(255, 92, 92, 0.45);
-  border-radius: 18px;
-  padding: 1.5rem 1.25rem 1.25rem;
-  box-shadow:
-    0 0 0 1px rgba(255, 92, 92, 0.15),
-    0 18px 50px rgba(0, 0, 0, 0.5);
-  animation: emergency-pop 0.28s ease;
-}
-
-.emergency-icon {
-  width: 56px;
-  height: 56px;
-  margin: 0 auto 12px;
-  border-radius: 14px;
-  display: grid;
-  place-items: center;
-  color: #fff;
-  background: var(--danger);
-  animation: pulse 1.2s infinite;
-}
-
-.emergency-icon svg {
-  width: 28px;
-  height: 28px;
-}
-
-.emergency-card h3 {
-  margin-bottom: 0.35rem;
-  font-size: 1.2rem;
-  color: #ffd0d0;
-}
-
-#emergency-text {
-  font-size: 15px;
-  line-height: 1.45;
-  margin-bottom: 8px;
-  white-space: pre-wrap;
-}
-
-.emergency-card .chip-danger {
-  margin-top: 12px;
-  min-width: 140px;
-  justify-content: center;
-}
-
-@keyframes emergency-pop {
-  from {
-    transform: scale(0.92);
-    opacity: 0;
-  }
-  to {
-    transform: scale(1);
-    opacity: 1;
-  }
-}
-
 .modal-card select option {
   background: #1a1a1a;
 }
@@ -1220,35 +1118,6 @@ svg {
 .user-table td {
   padding: 12px 6px;
   border-bottom: 1px solid var(--line);
-}
-
-.meal-table td:last-child {
-  text-align: left;
-}
-
-.meal-table .meal-input {
-  width: 100%;
-  padding: 0.55rem 0.7rem;
-  border-radius: 8px;
-  border: 1px solid var(--line);
-  background: rgba(0, 0, 0, 0.28);
-  color: var(--text);
-}
-
-.meal-table tr.today td {
-  background: rgba(255, 122, 0, 0.08);
-}
-
-.today-badge {
-  display: inline-block;
-  margin-left: 8px;
-  padding: 2px 7px;
-  border-radius: 999px;
-  background: rgba(255, 122, 0, 0.18);
-  color: var(--accent-2);
-  font-size: 10px;
-  font-weight: 700;
-  vertical-align: middle;
 }
 
 .muted-cell {

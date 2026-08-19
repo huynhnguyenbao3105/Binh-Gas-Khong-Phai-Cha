@@ -23,7 +23,6 @@ const shell = document.querySelector(".shell");
 const userMenu = document.getElementById("user-menu");
 const alarmBanner = document.getElementById("alarm-banner");
 const alarmBannerText = document.getElementById("alarm-banner-text");
-const bellBadge = document.getElementById("bell-badge");
 const clockText = document.getElementById("clock-text");
 const camSearch = document.getElementById("cam-search");
 const sidebarBackdrop = document.getElementById("sidebar-backdrop");
@@ -42,31 +41,14 @@ let appConfig = {
 };
 let previewAudio = null;
 
-const SOUND_EVENTS = [
-  { id: "gas", label: "Cảm biến gas" },
-  { id: "emergency", label: "Cảnh báo khẩn cấp" },
-  { id: "meal", label: "11:45 dọn cơm" },
-  { id: "home", label: "17:55 chuẩn bị về" },
-];
+const SOUND_EVENTS = [{ id: "gas", label: "Cảm biến gas" }];
 const players = new Map();
 let currentLayout = 4;
 let selectedCamId = null;
 let activeGroup = null;
 let searchQuery = "";
-let alertCount = 0;
 let collapsedGroups = new Set();
 let currentUser = null;
-let mealSchedule = [];
-
-const MEAL_DAY_LABELS = {
-  mon: "Thứ 2",
-  tue: "Thứ 3",
-  wed: "Thứ 4",
-  thu: "Thứ 5",
-  fri: "Thứ 6",
-  sat: "Thứ 7",
-  sun: "Chủ nhật",
-};
 
 function can(perm) {
   const role = currentUser && currentUser.role;
@@ -130,12 +112,6 @@ function logMessage(msg, isAlert = false) {
   logList.scrollTop = 0;
   while (logList.children.length > 40) {
     logList.removeChild(logList.lastChild);
-  }
-  if (isAlert) {
-    alertCount += 1;
-    bellBadge.textContent = String(alertCount);
-    bellBadge.classList.remove("hidden");
-    document.getElementById("btn-bell")?.classList.add("has-alert");
   }
 }
 
@@ -639,16 +615,12 @@ function setView(view) {
     .getElementById("view-logs")
     .classList.toggle("hidden", view !== "logs");
   document
-    .getElementById("view-meals")
-    .classList.toggle("hidden", view !== "meals");
-  document
     .getElementById("view-settings")
     .classList.toggle("hidden", view !== "settings");
 
   document.querySelectorAll(".nav-btn").forEach((btn) => {
     btn.classList.toggle("active", btn.dataset.view === view);
   });
-  if (view === "meals") renderMealSchedule();
   if (view === "settings") renderSoundSettings();
 }
 
@@ -945,7 +917,6 @@ async function saveSoundAssignments() {
 function unlockAudio() {
   if (audioUnlocked || !audioPlayer) return Promise.resolve();
   const file =
-    pickSound("emergency") ||
     pickSound("gas") ||
     (appConfig.soundFiles && appConfig.soundFiles[0]) ||
     "";
@@ -1027,98 +998,6 @@ async function saveAccount(e) {
   }
 }
 
-function todayMealDay() {
-  return ["sun", "mon", "tue", "wed", "thu", "fri", "sat"][new Date().getDay()];
-}
-
-function canEditMeals() {
-  return can("siren");
-}
-
-function renderMealSchedule() {
-  const body = document.getElementById("meal-table-body");
-  const saveBtn = document.getElementById("btn-save-meals");
-  if (!body) return;
-  const editable = canEditMeals();
-  if (saveBtn) saveBtn.classList.toggle("hidden", !editable);
-  const today = todayMealDay();
-  const days = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
-  const rows = days.map((day) => {
-    const item = mealSchedule.find((row) => row.day === day) || {
-      day,
-      name1: "",
-      name2: "",
-    };
-    return { ...item, day };
-  });
-  body.innerHTML = "";
-  rows.forEach((row) => {
-    const tr = document.createElement("tr");
-    if (row.day === today) tr.classList.add("today");
-    const dayCell = document.createElement("td");
-    dayCell.innerHTML = `<strong>${MEAL_DAY_LABELS[row.day] || row.day}</strong>`;
-    if (row.day === today) {
-      const badge = document.createElement("span");
-      badge.className = "today-badge";
-      badge.textContent = "Hôm nay";
-      dayCell.appendChild(badge);
-    }
-    const name1Cell = document.createElement("td");
-    const name2Cell = document.createElement("td");
-    if (editable) {
-      [name1Cell, name2Cell].forEach((cell, idx) => {
-        const field = idx === 0 ? "name1" : "name2";
-        const input = document.createElement("input");
-        input.type = "text";
-        input.className = "meal-input";
-        input.dataset.day = row.day;
-        input.dataset.field = field;
-        input.maxLength = 80;
-        input.placeholder = "Tên người dọn";
-        input.value = row[field] || "";
-        cell.appendChild(input);
-      });
-    } else {
-      name1Cell.textContent = row.name1 || "Chưa phân công";
-      name2Cell.textContent = row.name2 || "Chưa phân công";
-      if (!row.name1) name1Cell.classList.add("muted-cell");
-      if (!row.name2) name2Cell.classList.add("muted-cell");
-    }
-    tr.append(dayCell, name1Cell, name2Cell);
-    body.appendChild(tr);
-  });
-}
-
-async function saveMealSchedule() {
-  if (!canEditMeals()) return;
-  const days = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"].map((day) => {
-    const name1Input = document.querySelector(
-      `.meal-input[data-day="${day}"][data-field="name1"]`,
-    );
-    const name2Input = document.querySelector(
-      `.meal-input[data-day="${day}"][data-field="name2"]`,
-    );
-    return {
-      day,
-      name1: name1Input ? name1Input.value.trim() : "",
-      name2: name2Input ? name2Input.value.trim() : "",
-    };
-  });
-  const res = await fetch("/api/meal-schedule", {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ days }),
-  });
-  const data = await res.json();
-  if (!res.ok || !data.success) {
-    alert((data && data.error) || "Lưu lịch thất bại");
-    return;
-  }
-  mealSchedule = data.mealSchedule || days;
-  renderMealSchedule();
-  logMessage("Đã cập nhật lịch dọn cơm");
-}
-
 function openCamModal(existing) {
   if (!can("cameras")) return;
   camForm.dataset.editId = existing ? existing.id : "";
@@ -1155,12 +1034,10 @@ async function loadConfig() {
   if (!res.ok) throw new Error("Không tải được cấu hình");
   appConfig = await res.json();
   currentUser = appConfig.me || null;
-  mealSchedule = appConfig.mealSchedule || [];
   appConfig.sounds = appConfig.sounds || {};
   appConfig.soundFiles = appConfig.soundFiles || [];
   syncUserChrome();
   renderCameras();
-  renderMealSchedule();
   renderSoundSettings();
 }
 
@@ -1213,157 +1090,11 @@ document.addEventListener("click", (e) => {
   if (!e.target.closest(".sound-picker")) closeSoundPickers();
 });
 
-const emergencyPopup = document.getElementById("emergency-popup");
-const EMERGENCY_COOLDOWN_MS = 30000;
-let sendingAlert = false;
-let emergencyCooldownUntil = 0;
-let emergencyCooldownTimer = null;
-
-function syncEmergencyButton() {
-  const btn = document.getElementById("btn-bell");
-  if (!btn) return;
-  const remainMs = emergencyCooldownUntil - Date.now();
-  if (remainMs > 0) {
-    const sec = Math.ceil(remainMs / 1000);
-    btn.classList.add("cooldown");
-    btn.disabled = true;
-    btn.title = `Chờ ${sec}s để gửi lại`;
-    if (bellBadge) {
-      bellBadge.textContent = String(sec);
-      bellBadge.classList.remove("hidden");
-    }
-    return;
-  }
-  btn.classList.remove("cooldown");
-  btn.disabled = false;
-  btn.title = "Thông báo khẩn cấp";
-  if (bellBadge) {
-    if (alertCount > 0) {
-      bellBadge.textContent = String(alertCount);
-      bellBadge.classList.remove("hidden");
-    } else {
-      bellBadge.classList.add("hidden");
-    }
-  }
-}
-
-function startEmergencyCooldown(ms = EMERGENCY_COOLDOWN_MS) {
-  emergencyCooldownUntil = Date.now() + ms;
-  syncEmergencyButton();
-  if (emergencyCooldownTimer) clearInterval(emergencyCooldownTimer);
-  emergencyCooldownTimer = setInterval(() => {
-    if (Date.now() >= emergencyCooldownUntil) {
-      clearInterval(emergencyCooldownTimer);
-      emergencyCooldownTimer = null;
-      syncEmergencyButton();
-      return;
-    }
-    syncEmergencyButton();
-  }, 250);
-}
-
-function sendEmergencyAlert() {
-  if (sendingAlert) return;
-  if (Date.now() < emergencyCooldownUntil) {
-    syncEmergencyButton();
-    return;
-  }
-  sendingAlert = true;
-  alertCount = 0;
-  bellBadge.classList.add("hidden");
-  document.getElementById("btn-bell")?.classList.remove("has-alert");
-  userMenu.classList.add("hidden");
-  socket.timeout(5000).emit("EMERGENCY_ALERT", {}, (err, ack) => {
-    sendingAlert = false;
-    if (err) {
-      logMessage("Không gửi được cảnh báo. Kiểm tra kết nối.");
-      return;
-    }
-    if (ack && ack.success === false) {
-      if (ack.retryAfterMs) startEmergencyCooldown(ack.retryAfterMs);
-      logMessage(ack.error || "Chưa thể gửi cảnh báo khẩn cấp");
-      return;
-    }
-    startEmergencyCooldown(EMERGENCY_COOLDOWN_MS);
-    const n = ack && ack.recipients ? ack.recipients : 0;
-    logMessage(
-      n
-        ? `Đã gửi cảnh báo khẩn cấp tới ${n} phiên`
-        : "Đã gửi cảnh báo khẩn cấp",
-    );
-  });
-}
-
-let emergencyHideTimer = null;
-
-function showEmergencyPopup(data) {
-  const title = (data && data.title) || "Cảnh báo khẩn cấp";
-  const message = (data && data.message) || "Bình gas đang di chuyển";
-  const when =
-    data && data.timestamp
-      ? new Date(data.timestamp).toLocaleTimeString("vi-VN", {
-          hour: "2-digit",
-          minute: "2-digit",
-          second: "2-digit",
-        })
-      : "";
-  document.getElementById("emergency-title").textContent = title;
-  document.getElementById("emergency-text").textContent = message;
-  document.getElementById("emergency-time").textContent = when
-    ? `Lúc ${when}`
-    : "";
-  emergencyPopup.classList.remove("hidden");
-  logMessage(`${title}: ${message}`, true);
-  playAlertSound((data && data.kind) || "emergency");
-  if (emergencyHideTimer) clearTimeout(emergencyHideTimer);
-  emergencyHideTimer = setTimeout(() => {
-    emergencyHideTimer = null;
-    ackEmergencyPopup();
-  }, 5000);
-}
-
-function ackEmergencyPopup() {
-  if (emergencyHideTimer) {
-    clearTimeout(emergencyHideTimer);
-    emergencyHideTimer = null;
-  }
-  emergencyPopup.classList.add("hidden");
-  stopPreviewSound();
-  if (alarmBanner.classList.contains("hidden")) {
-    audioPlayer.pause();
-    audioPlayer.currentTime = 0;
-  }
-}
-
-document
-  .getElementById("btn-bell")
-  .addEventListener("click", sendEmergencyAlert);
-document
-  .getElementById("emergency-ack")
-  .addEventListener("click", ackEmergencyPopup);
-
-socket.on("EMERGENCY_ALERT", (data) => {
-  showEmergencyPopup(data);
-});
-
-socket.on("SCHEDULED_ALERT", (data) => {
-  showEmergencyPopup(data);
-});
-
-socket.on("MEAL_SCHEDULE_UPDATED", (data) => {
-  mealSchedule = (data && data.mealSchedule) || mealSchedule;
-  renderMealSchedule();
-});
-
 socket.on("SOUNDS_UPDATED", (data) => {
   appConfig.sounds = (data && data.sounds) || appConfig.sounds;
   appConfig.soundFiles = (data && data.soundFiles) || appConfig.soundFiles;
   renderSoundSettings();
 });
-
-document
-  .getElementById("btn-save-meals")
-  .addEventListener("click", saveMealSchedule);
 
 document.getElementById("btn-logout").addEventListener("click", async () => {
   try {

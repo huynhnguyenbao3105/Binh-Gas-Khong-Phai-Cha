@@ -39,19 +39,7 @@
       "sensorIds": ["esp32-2"]
     }
   ],
-  "mealSchedule": [
-    { "day": "mon", "name1": "", "name2": "" },
-    { "day": "tue", "name1": "", "name2": "" },
-    { "day": "wed", "name1": "", "name2": "" },
-    { "day": "thu", "name1": "", "name2": "" },
-    { "day": "fri", "name1": "", "name2": "" },
-    { "day": "sat", "name1": "", "name2": "" },
-    { "day": "sun", "name1": "", "name2": "" }
-  ],
   "sounds": {
-    "gas": ["hachimi.mp3"],
-    "emergency": ["hachimi.mp3"],
-    "meal": ["hachimi.mp3"],
-    "home": ["hachimi.mp3"]
+    "gas": ["hachimi.mp3"]
   }
 }

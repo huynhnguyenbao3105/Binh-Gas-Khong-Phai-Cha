@@ -85,23 +85,7 @@ function normalizeUser(raw, index) {
   };
 }
 
-const MEAL_DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
-const WEEKDAY_TO_DAY = {
-  Sun: "sun",
-  Mon: "mon",
-  Tue: "tue",
-  Wed: "wed",
-  Thu: "thu",
-  Fri: "fri",
-  Sat: "sat",
-};
-const sentScheduleSlots = new Set();
-
-function mealName(value) {
-  return value ? String(value).trim().slice(0, 80) : "";
-}
-
-const SOUND_EVENTS = ["gas", "emergency", "meal", "home"];
+const SOUND_EVENTS = ["gas"];
 const SOUND_RENAMES = {
   "con-cac_h9fXgQu.mp3": "con-cac-tran-dan.mp3",
   "siren.mp3": "hachimi.mp3",
@@ -153,90 +137,6 @@ function normalizeSoundAssignments(raw) {
   return out;
 }
 
-function normalizeMealSchedule(raw) {
-  const source = Array.isArray(raw) ? raw : [];
-  return MEAL_DAYS.map((day) => {
-    const row = source.find((item) => item && item.day === day) || {};
-    const people = Array.isArray(row.people) ? row.people : [];
-    return {
-      day,
-      name1: mealName(row.name1 || people[0] || row.name),
-      name2: mealName(row.name2 || people[1]),
-    };
-  });
-}
-
-function vietnamNow() {
-  const map = {};
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: "Asia/Ho_Chi_Minh",
-    weekday: "short",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-  }).formatToParts(new Date());
-  parts.forEach((part) => {
-    if (part.type !== "literal") map[part.type] = part.value;
-  });
-  return {
-    weekday: map.weekday,
-    day: WEEKDAY_TO_DAY[map.weekday] || "mon",
-    hour: Number(map.hour),
-    minute: Number(map.minute),
-    dateKey: `${map.year}-${map.month}-${map.day}`,
-  };
-}
-
-function todayMealDutyLabel() {
-  const now = vietnamNow();
-  const row = (config.mealSchedule || []).find((item) => item.day === now.day);
-  const names = [row && row.name1, row && row.name2]
-    .map((name) => String(name || "").trim())
-    .filter(Boolean);
-  return names.length ? names.join(", ") : "Chưa phân công";
-}
-
-function emitScheduledAlert(kind) {
-  const isMeal = kind === "meal";
-  const payload = {
-    kind,
-    title: isMeal ? "Đến giờ dọn cơm" : "Chuẩn bị về",
-    message: isMeal
-      ? `Hôm nay: ${todayMealDutyLabel()}`
-      : "Đến giờ chuẩn bị về",
-    timestamp: new Date().toISOString(),
-  };
-  io.emit("SCHEDULED_ALERT", payload);
-  console.log(`[SCHEDULE] ${payload.title} — ${payload.message}`);
-}
-
-function checkScheduledAlerts() {
-  const now = vietnamNow();
-  if (now.weekday === "Sun") return;
-  let kind = null;
-  if (now.hour === 11 && now.minute === 45) kind = "meal";
-  else if (now.hour === 17 && now.minute === 55) kind = "home";
-  if (!kind) return;
-  const key = `${now.dateKey}:${kind}`;
-  if (sentScheduleSlots.has(key)) return;
-  sentScheduleSlots.add(key);
-  Array.from(sentScheduleSlots).forEach((slot) => {
-    if (!slot.startsWith(now.dateKey)) sentScheduleSlots.delete(slot);
-  });
-  emitScheduledAlert(kind);
-}
-
-function startScheduleWatcher() {
-  checkScheduledAlerts();
-  setInterval(checkScheduledAlerts, 15000);
-  console.log(
-    "Lịch thông báo: 11:45 dọn cơm, 17:55 chuẩn bị về (T2–T7, nghỉ CN)",
-  );
-}
-
 function normalizeConfig(raw) {
   const source = raw && typeof raw === "object" ? raw : {};
   const cameras =
@@ -265,9 +165,8 @@ function normalizeConfig(raw) {
     source.sessionSecret && String(source.sessionSecret).length >= 16
       ? String(source.sessionSecret)
       : crypto.randomBytes(32).toString("hex");
-  const mealSchedule = normalizeMealSchedule(source.mealSchedule);
   const sounds = normalizeSoundAssignments(source.sounds);
-  return { cameras, users, sessionSecret, mealSchedule, sounds };
+  return { cameras, users, sessionSecret, sounds };
 }
 
 function needsPersist(raw) {
@@ -277,6 +176,10 @@ function needsPersist(raw) {
   if (raw.password) return true;
   if (raw.users.some((u) => u && u.password && !u.passwordHash)) return true;
   if (!raw.sounds || typeof raw.sounds !== "object") return true;
+  if (raw.mealSchedule) return true;
+  if (Object.keys(raw.sounds).some((key) => !SOUND_EVENTS.includes(key))) {
+    return true;
+  }
   if (
     SOUND_EVENTS.some(
       (key) => raw.sounds[key] != null && !Array.isArray(raw.sounds[key]),
@@ -297,7 +200,6 @@ function loadConfig() {
           sessionSecret: created.sessionSecret,
           users: created.users,
           cameras: created.cameras,
-          mealSchedule: created.mealSchedule,
           sounds: created.sounds,
         },
         null,
@@ -313,7 +215,6 @@ function loadConfig() {
       sessionSecret: normalized.sessionSecret,
       users: normalized.users,
       cameras: normalized.cameras,
-      mealSchedule: normalized.mealSchedule,
       sounds: normalized.sounds,
     };
     fs.writeFileSync(configPath, JSON.stringify(toSave, null, 2));
@@ -326,7 +227,6 @@ function saveConfig() {
     sessionSecret: config.sessionSecret,
     users: config.users,
     cameras: config.cameras,
-    mealSchedule: config.mealSchedule,
     sounds: config.sounds,
   };
   fs.writeFileSync(configPath, JSON.stringify(toSave, null, 2));
@@ -338,7 +238,6 @@ function publicConfig(user) {
     webrtcPort: 8889,
     rtspPort: 8554,
     cameras: config.cameras,
-    mealSchedule: config.mealSchedule,
     sounds: config.sounds,
     soundFiles: listSoundFiles(),
     me: publicUser(user),
@@ -567,13 +466,6 @@ app.put("/api/sounds", requireRole("admin", "operator"), (req, res) => {
   });
 });
 
-app.put("/api/meal-schedule", requireRole("admin", "operator"), (req, res) => {
-  config.mealSchedule = normalizeMealSchedule(req.body && req.body.days);
-  saveConfig();
-  io.emit("MEAL_SCHEDULE_UPDATED", { mealSchedule: config.mealSchedule });
-  res.json({ success: true, mealSchedule: config.mealSchedule });
-});
-
 app.post("/api/cameras", requireRole("admin"), (req, res) => {
   const cam = normalizeCamera(req.body || {}, config.cameras.length);
   if (config.cameras.some((c) => c.id === cam.id || c.path === cam.path)) {
@@ -758,57 +650,8 @@ io.use((socket, next) => {
   next();
 });
 
-const EMERGENCY_COOLDOWN_MS = 30000;
-const emergencyCooldownByUser = new Map();
-
 io.on("connection", (socket) => {
-  const room = "user:" + socket.user.id;
-  socket.join(room);
   console.log(`Client connected: ${socket.id} (${socket.user.username})`);
-
-  socket.on("EMERGENCY_ALERT", async (data, ack) => {
-    const now = Date.now();
-    const until = emergencyCooldownByUser.get(socket.user.id) || 0;
-    if (now < until) {
-      if (typeof ack === "function") {
-        ack({
-          success: false,
-          error: `Chờ ${Math.ceil((until - now) / 1000)}s để gửi lại`,
-          retryAfterMs: until - now,
-        });
-      }
-      return;
-    }
-
-    const message =
-      String((data && data.message) || "")
-        .replace(/\s+/g, " ")
-        .trim()
-        .slice(0, 400) || "Bình gas đang di chuyển hãy xóa dấu vết lẹ!";
-    const payload = {
-      kind: "emergency",
-      title: "Cảnh báo khẩn cấp",
-      userId: socket.user.id,
-      username: socket.user.username,
-      name: socket.user.name,
-      message,
-      timestamp: new Date().toISOString(),
-    };
-    emergencyCooldownByUser.set(socket.user.id, now + EMERGENCY_COOLDOWN_MS);
-    const recipients = await io.in(room).fetchSockets();
-    io.to(room).emit("EMERGENCY_ALERT", payload);
-    console.log(
-      `[ALERT] Cảnh báo khẩn cấp từ ${socket.user.username} tới ${recipients.length} phiên`,
-    );
-    if (typeof ack === "function") {
-      ack({
-        success: true,
-        recipients: recipients.length,
-        cooldownMs: EMERGENCY_COOLDOWN_MS,
-      });
-    }
-  });
-
   socket.on("disconnect", () => {
     console.log(`Client disconnected: ${socket.id}`);
   });
@@ -819,7 +662,6 @@ server.listen(PORT, () => {
   console.log(`Server đang chạy tại http://localhost:${PORT}`);
   console.log(`API kích hoạt: GET http://localhost:${PORT}/api/trigger`);
   startMediaMTX();
-  startScheduleWatcher();
 });
 
 function startMediaMTX() {
