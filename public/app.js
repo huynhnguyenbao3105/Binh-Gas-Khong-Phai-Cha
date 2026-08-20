@@ -353,6 +353,11 @@ class CameraPlayer {
             this.timeoutId = null;
           }
           reject(new Error("ICE failed"));
+        } else if ((pc.connectionState === "failed" || pc.connectionState === "disconnected") && settled) {
+          if (this.session === session && this.connected) {
+            console.log("WebRTC connection lost. Reconnecting...");
+            this.stop().then(() => setTimeout(() => this.start(), 2000));
+          }
         }
       };
       pc.oniceconnectionstatechange = () => {
@@ -365,6 +370,11 @@ class CameraPlayer {
             this.timeoutId = null;
           }
           reject(new Error("ICE failed"));
+        } else if ((state === "failed" || state === "disconnected") && settled) {
+          if (this.session === session && this.connected) {
+            console.log("WebRTC ICE lost. Reconnecting...");
+            this.stop().then(() => setTimeout(() => this.start(), 2000));
+          }
         }
       };
     });
