@@ -705,17 +705,24 @@ function setView(view) {
 
 function tickClock() {
   const now = new Date();
-  const date = now.toLocaleDateString("vi-VN", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  });
+  const narrow = window.matchMedia("(max-width: 640px)").matches;
+  const date = narrow
+    ? now.toLocaleDateString("vi-VN", {
+        weekday: "short",
+        day: "numeric",
+        month: "numeric",
+      })
+    : now.toLocaleDateString("vi-VN", {
+        weekday: "long",
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+      });
   const time = now.toLocaleTimeString("vi-VN", {
     hour: "2-digit",
     minute: "2-digit",
   });
-  clockText.textContent = `${date}  |  ${time}`;
+  clockText.textContent = narrow ? `${date} · ${time}` : `${date}  |  ${time}`;
 }
 
 function syncSirenButtons() {
