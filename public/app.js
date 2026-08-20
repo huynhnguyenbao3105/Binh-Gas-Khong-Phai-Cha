@@ -15,17 +15,12 @@ const btnClearLog = document.getElementById("btn-clear-log");
 const btnChangePass = document.getElementById("btn-change-pass");
 const btnAddCam = document.getElementById("btn-add-cam");
 const cameraGrid = document.getElementById("camera-grid");
-const camTree = document.getElementById("cam-tree");
 const camModal = document.getElementById("cam-modal");
 const camForm = document.getElementById("cam-form");
-const camSidebar = document.getElementById("cam-sidebar");
-const shell = document.querySelector(".shell");
 const userMenu = document.getElementById("user-menu");
 const alarmBanner = document.getElementById("alarm-banner");
 const alarmBannerText = document.getElementById("alarm-banner-text");
 const clockText = document.getElementById("clock-text");
-const camSearch = document.getElementById("cam-search");
-const sidebarBackdrop = document.getElementById("sidebar-backdrop");
 
 let isSystemActive = true;
 let audioUnlocked = false;
@@ -45,9 +40,6 @@ const SOUND_EVENTS = [{ id: "gas", label: "Cảm biến gas" }];
 const players = new Map();
 let currentLayout = 4;
 let selectedCamId = null;
-let activeGroup = null;
-let searchQuery = "";
-let collapsedGroups = new Set();
 let currentUser = null;
 
 function can(perm) {
@@ -145,6 +137,13 @@ class CameraPlayer {
     this.pc = null;
     this.whepResourceUrl = null;
     this.timeoutId = null;
+    this.reconnectTimer = null;
+    this.disconnectTimer = null;
+    this.watchdogTimer = null;
+    this.reconnectPending = false;
+    this.lastFramesReceived = 0;
+    this.lastVideoTime = 0;
+    this.staleTicks = 0;
     this.root = this.render();
   }
 
@@ -238,15 +237,38 @@ class CameraPlayer {
     }
   }
 
-  async cleanup() {
+  clearHealthTimers(opts = {}) {
     if (this.timeoutId) {
       clearTimeout(this.timeoutId);
       this.timeoutId = null;
     }
+    if (this.disconnectTimer) {
+      clearTimeout(this.disconnectTimer);
+      this.disconnectTimer = null;
+    }
+    if (this.watchdogTimer) {
+      clearInterval(this.watchdogTimer);
+      this.watchdogTimer = null;
+    }
+    if (!opts.keepReconnect) {
+      if (this.reconnectTimer) {
+        clearTimeout(this.reconnectTimer);
+        this.reconnectTimer = null;
+      }
+      this.reconnectPending = false;
+    }
+    this.staleTicks = 0;
+  }
+
+  async cleanup(opts = {}) {
+    this.clearHealthTimers(opts);
     const pc = this.pc;
     this.pc = null;
     if (pc) {
       try {
+        pc.onconnectionstatechange = null;
+        pc.oniceconnectionstatechange = null;
+        pc.ontrack = null;
         pc.getReceivers().forEach((r) => r.track && r.track.stop());
         pc.close();
       } catch (err) {
@@ -263,10 +285,132 @@ class CameraPlayer {
     }
   }
 
+  scheduleReconnect(reason, delayMs = 2000) {
+    if (this.reconnectPending) return;
+    if (!this.connected && !this.connecting) return;
+    this.reconnectPending = true;
+    if (this.disconnectTimer) {
+      clearTimeout(this.disconnectTimer);
+      this.disconnectTimer = null;
+    }
+    if (this.watchdogTimer) {
+      clearInterval(this.watchdogTimer);
+      this.watchdogTimer = null;
+    }
+    logMessage(`${this.cfg.name}: WebRTC ${reason}, đang nối lại...`);
+    (async () => {
+      await this.stop({ keepReconnect: true });
+      this.reconnectTimer = setTimeout(() => {
+        this.reconnectTimer = null;
+        this.reconnectPending = false;
+        this.start();
+      }, delayMs);
+    })();
+  }
+
+  noteLinkProblem(state) {
+    if (!this.connected || this.reconnectPending) return;
+    if (state === "failed" || state === "closed") {
+      this.scheduleReconnect("mất kết nối");
+      return;
+    }
+    if (state !== "disconnected") return;
+    if (this.disconnectTimer) return;
+    this.disconnectTimer = setTimeout(() => {
+      this.disconnectTimer = null;
+      const pc = this.pc;
+      if (!pc || !this.connected || this.reconnectPending) return;
+      const ice = pc.iceConnectionState;
+      const conn = pc.connectionState;
+      if (
+        ice === "disconnected" ||
+        ice === "failed" ||
+        ice === "closed" ||
+        conn === "disconnected" ||
+        conn === "failed" ||
+        conn === "closed"
+      ) {
+        this.scheduleReconnect("ICE đứt");
+      }
+    }, 4000);
+  }
+
+  noteLinkOk() {
+    if (this.disconnectTimer) {
+      clearTimeout(this.disconnectTimer);
+      this.disconnectTimer = null;
+    }
+  }
+
+  startWatchdog(session) {
+    if (this.watchdogTimer) clearInterval(this.watchdogTimer);
+    this.lastFramesReceived = 0;
+    this.lastVideoTime = 0;
+    this.staleTicks = 0;
+    this.watchdogReadyAt = Date.now() + 5000;
+    this.watchdogTimer = setInterval(() => {
+      if (Date.now() < this.watchdogReadyAt) return;
+      this.checkStreamHealth(session);
+    }, 3000);
+  }
+
+  async checkStreamHealth(session) {
+    if (session !== this.session || !this.connected || this.reconnectPending)
+      return;
+    if (document.hidden) {
+      this.staleTicks = 0;
+      return;
+    }
+    const pc = this.pc;
+    const video = this.els.video;
+    if (!pc || !video) return;
+
+    let frames = null;
+    try {
+      const stats = await pc.getStats();
+      stats.forEach((report) => {
+        if (
+          report.type === "inbound-rtp" &&
+          (report.kind === "video" || report.mediaType === "video") &&
+          typeof report.framesReceived === "number"
+        ) {
+          frames = report.framesReceived;
+        }
+      });
+    } catch (err) {
+      return;
+    }
+    if (session !== this.session || !this.connected) return;
+
+    let progressing = false;
+    if (frames != null) {
+      if (frames === 0 && this.lastFramesReceived === 0) {
+        return;
+      }
+      if (frames > this.lastFramesReceived) progressing = true;
+      this.lastFramesReceived = frames;
+    } else {
+      const t = video.currentTime || 0;
+      if (t === 0 && this.lastVideoTime === 0) return;
+      if (t > this.lastVideoTime + 0.05) progressing = true;
+      this.lastVideoTime = t;
+    }
+
+    if (progressing) {
+      this.staleTicks = 0;
+      return;
+    }
+    this.staleTicks += 1;
+    if (this.staleTicks >= 3) {
+      this.scheduleReconnect("đứng hình");
+    }
+  }
+
   async start() {
     if (this.connecting || this.connected) return;
     const session = ++this.session;
     this.connecting = true;
+    this.reconnectPending = false;
     this.setStatus("Connecting", "connecting");
     this.setOverlay("Đang kết nối WebRTC...", true);
     this.hideIframe();
@@ -280,6 +424,7 @@ class CameraPlayer {
         this.setStatus("WebRTC", "online");
         this.connected = true;
         this.connecting = false;
+        this.startWatchdog(session);
         logMessage(`${this.cfg.name}: WebRTC đã kết nối`);
         return;
       } catch (err) {
@@ -345,36 +490,35 @@ class CameraPlayer {
         resolve();
       };
       pc.onconnectionstatechange = () => {
-        if (pc.connectionState === "connected") markConnected();
-        if (pc.connectionState === "failed" && !settled) {
+        const state = pc.connectionState;
+        if (state === "connected") {
+          markConnected();
+          this.noteLinkOk();
+        } else if (state === "failed" && !settled) {
           settled = true;
           if (this.timeoutId) {
             clearTimeout(this.timeoutId);
             this.timeoutId = null;
           }
           reject(new Error("ICE failed"));
-        } else if ((pc.connectionState === "failed" || pc.connectionState === "disconnected") && settled) {
-          if (this.session === session && this.connected) {
-            console.log("WebRTC connection lost. Reconnecting...");
-            this.stop().then(() => setTimeout(() => this.start(), 2000));
-          }
+        } else if (settled) {
+          this.noteLinkProblem(state);
         }
       };
       pc.oniceconnectionstatechange = () => {
         const state = pc.iceConnectionState;
-        if (state === "connected" || state === "completed") markConnected();
-        if (state === "failed" && !settled) {
+        if (state === "connected" || state === "completed") {
+          markConnected();
+          this.noteLinkOk();
+        } else if (state === "failed" && !settled) {
           settled = true;
           if (this.timeoutId) {
             clearTimeout(this.timeoutId);
             this.timeoutId = null;
           }
           reject(new Error("ICE failed"));
-        } else if ((state === "failed" || state === "disconnected") && settled) {
-          if (this.session === session && this.connected) {
-            console.log("WebRTC ICE lost. Reconnecting...");
-            this.stop().then(() => setTimeout(() => this.start(), 2000));
-          }
+        } else if (settled) {
+          this.noteLinkProblem(state);
         }
       };
     });
@@ -428,11 +572,12 @@ class CameraPlayer {
     this.connecting = false;
   }
 
-  async stop() {
+  async stop(opts = {}) {
     this.session += 1;
     this.connecting = false;
     this.connected = false;
-    await this.cleanup();
+    if (!opts.keepReconnect) this.reconnectPending = false;
+    await this.cleanup(opts);
     this.hideIframe();
     this.setOverlay("Chưa kết nối", true);
     this.setStatus("Offline", "offline");
@@ -530,91 +675,15 @@ function renderCameras() {
   if (!selectedCamId || !keep.has(selectedCamId)) {
     selectedCamId = list[0] ? list[0].id : null;
   }
-  if (!activeGroup) {
-    const first = list[0];
-    activeGroup = first ? first.group || "Khu vực chính" : null;
-  }
   renderGrid();
-  renderCameraTree();
-}
-
-function renderCameraTree() {
-  const list = enabledCameras();
-  const q = searchQuery.trim().toLowerCase();
-  const filtered = q
-    ? list.filter((c) =>
-        `${c.name} ${c.id} ${c.group || ""}`.toLowerCase().includes(q),
-      )
-    : list;
-
-  const groups = new Map();
-  filtered.forEach((c) => {
-    const g = c.group || "Khu vực chính";
-    if (!groups.has(g)) groups.set(g, []);
-    groups.get(g).push(c);
-  });
-
-  camTree.innerHTML = "";
-  if (!filtered.length) {
-    const empty = document.createElement("p");
-    empty.className = "tree-empty";
-    empty.textContent = q ? "Không tìm thấy camera" : "Chưa có camera";
-    camTree.appendChild(empty);
-    return;
-  }
-
-  groups.forEach((cams, groupName) => {
-    const section = document.createElement("div");
-    section.className =
-      "tree-group" + (collapsedGroups.has(groupName) ? " collapsed" : "");
-
-    const head = document.createElement("button");
-    head.type = "button";
-    head.className =
-      "tree-group-head" + (activeGroup === groupName ? " active" : "");
-    head.innerHTML = `
-            <svg class="tree-chevron" viewBox="0 0 24 24"><path d="M7 10l5 5 5-5"/></svg>
-            <span>${groupName}</span>
-            ${activeGroup === groupName ? '<span class="dot"></span>' : ""}
-        `;
-    head.addEventListener("click", () => {
-      if (collapsedGroups.has(groupName)) collapsedGroups.delete(groupName);
-      else collapsedGroups.add(groupName);
-      activeGroup = groupName;
-      renderCameraTree();
-    });
-
-    const items = document.createElement("div");
-    items.className = "tree-items";
-    cams.forEach((cam) => {
-      const item = document.createElement("button");
-      item.type = "button";
-      item.className =
-        "tree-item" + (selectedCamId === cam.id ? " active" : "");
-      item.innerHTML = `
-                <svg viewBox="0 0 24 24"><rect x="4" y="7" width="12" height="10" rx="1.5"/><path d="M16 10.5 20 8v8l-4-2.5"/></svg>
-                <span>${cam.name}</span>
-            `;
-      item.addEventListener("click", () => selectCamera(cam.id, true));
-      items.appendChild(item);
-    });
-
-    section.appendChild(head);
-    section.appendChild(items);
-    camTree.appendChild(section);
-  });
 }
 
 function selectCamera(id, fromUser) {
   selectedCamId = id;
-  const cam = enabledCameras().find((c) => c.id === id);
-  if (cam) activeGroup = cam.group || "Khu vực chính";
   players.forEach((player) => {
     player.els.card.classList.toggle("selected", player.cfg.id === id);
   });
-  renderCameraTree();
   if (fromUser && currentLayout === 1) renderGrid();
-  if (fromUser && window.innerWidth <= 960) closeMobileSidebar();
 }
 
 function setView(view) {
@@ -1051,16 +1120,6 @@ async function loadConfig() {
   renderSoundSettings();
 }
 
-function openMobileSidebar() {
-  camSidebar.classList.add("open");
-  sidebarBackdrop.classList.remove("hidden");
-}
-
-function closeMobileSidebar() {
-  camSidebar.classList.remove("open");
-  sidebarBackdrop.classList.add("hidden");
-}
-
 document.querySelectorAll(".nav-btn").forEach((btn) => {
   btn.addEventListener("click", () => {
     const view = btn.dataset.view;
@@ -1072,21 +1131,6 @@ document.querySelectorAll(".nav-btn").forEach((btn) => {
 document.querySelectorAll(".layout-btn").forEach((btn) => {
   btn.addEventListener("click", () => setLayout(btn.dataset.layout));
 });
-
-document
-  .getElementById("btn-collapse-sidebar")
-  .addEventListener("click", () => {
-    if (window.innerWidth <= 960) {
-      closeMobileSidebar();
-      return;
-    }
-    shell.classList.toggle("sidebar-collapsed");
-  });
-
-document
-  .getElementById("btn-open-sidebar")
-  .addEventListener("click", openMobileSidebar);
-sidebarBackdrop.addEventListener("click", closeMobileSidebar);
 
 document.getElementById("btn-user").addEventListener("click", (e) => {
   e.stopPropagation();
@@ -1111,11 +1155,6 @@ document.getElementById("btn-logout").addEventListener("click", async () => {
     await fetch("/api/logout", { method: "POST" });
   } catch (err) {}
   window.location.href = "/login.html";
-});
-
-camSearch.addEventListener("input", () => {
-  searchQuery = camSearch.value;
-  renderCameraTree();
 });
 
 btnAddCam.addEventListener("click", () => openCamModal(null));

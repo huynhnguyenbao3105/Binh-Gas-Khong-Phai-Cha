@@ -69,44 +69,59 @@
         </div>
       </nav>
 
-      <aside class="cam-sidebar" id="cam-sidebar">
-        <div class="sidebar-head">
-          <h2>Giám sát trực tiếp</h2>
-          <button
-            class="icon-btn"
-            id="btn-collapse-sidebar"
-            type="button"
-            title="Thu gọn"
-          >
-            <svg viewBox="0 0 24 24"><path d="M15 6 9 12l6 6" /></svg>
-          </button>
-        </div>
-        <div class="tree-scroll" id="cam-tree"></div>
-      </aside>
-
       <div class="workspace">
         <header class="main-header">
-          <button
-            class="icon-btn mobile-only"
-            id="btn-open-sidebar"
-            type="button"
-            title="Danh sách camera"
-          >
-            <svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16" /></svg>
-          </button>
-          <label class="header-search">
+          <div class="toolbar-date">
             <svg viewBox="0 0 24 24">
-              <circle cx="11" cy="11" r="6.5" />
-              <path d="M16 16l4 4" />
+              <rect x="3.5" y="5" width="17" height="15" rx="2" />
+              <path d="M8 3.5v3M16 3.5v3M3.5 10h17" />
             </svg>
-            <input
-              id="cam-search"
-              type="search"
-              placeholder="Tìm camera"
-              autocomplete="off"
-            />
-          </label>
+            <span id="clock-text"></span>
+          </div>
           <div class="header-right">
+            <div class="grid-switcher" role="tablist">
+              <button
+                class="layout-btn"
+                data-layout="1"
+                type="button"
+                title="1 camera"
+              >
+                <svg viewBox="0 0 24 24">
+                  <rect x="5" y="5" width="14" height="14" rx="1.5" />
+                </svg>
+              </button>
+              <button
+                class="layout-btn active"
+                data-layout="4"
+                type="button"
+                title="Lưới 2×2"
+              >
+                <svg viewBox="0 0 24 24">
+                  <rect x="4" y="4" width="7" height="7" rx="1" />
+                  <rect x="13" y="4" width="7" height="7" rx="1" />
+                  <rect x="4" y="13" width="7" height="7" rx="1" />
+                  <rect x="13" y="13" width="7" height="7" rx="1" />
+                </svg>
+              </button>
+              <button
+                class="layout-btn"
+                data-layout="9"
+                type="button"
+                title="Lưới 3×3"
+              >
+                <svg viewBox="0 0 24 24">
+                  <rect x="3.5" y="3.5" width="5" height="5" rx=".8" />
+                  <rect x="9.5" y="3.5" width="5" height="5" rx=".8" />
+                  <rect x="15.5" y="3.5" width="5" height="5" rx=".8" />
+                  <rect x="3.5" y="9.5" width="5" height="5" rx=".8" />
+                  <rect x="9.5" y="9.5" width="5" height="5" rx=".8" />
+                  <rect x="15.5" y="9.5" width="5" height="5" rx=".8" />
+                  <rect x="3.5" y="15.5" width="5" height="5" rx=".8" />
+                  <rect x="9.5" y="15.5" width="5" height="5" rx=".8" />
+                  <rect x="15.5" y="15.5" width="5" height="5" rx=".8" />
+                </svg>
+              </button>
+            </div>
             <div class="siren-wrap" data-perm="siren">
               <button
                 class="icon-btn on"
@@ -145,59 +160,6 @@
             </div>
           </div>
         </header>
-
-        <div class="toolbar">
-          <div class="toolbar-date">
-            <svg viewBox="0 0 24 24">
-              <rect x="3.5" y="5" width="17" height="15" rx="2" />
-              <path d="M8 3.5v3M16 3.5v3M3.5 10h17" />
-            </svg>
-            <span id="clock-text"></span>
-          </div>
-          <div class="grid-switcher" role="tablist">
-            <button
-              class="layout-btn"
-              data-layout="1"
-              type="button"
-              title="1 camera"
-            >
-              <svg viewBox="0 0 24 24">
-                <rect x="5" y="5" width="14" height="14" rx="1.5" />
-              </svg>
-            </button>
-            <button
-              class="layout-btn active"
-              data-layout="4"
-              type="button"
-              title="Lưới 2×2"
-            >
-              <svg viewBox="0 0 24 24">
-                <rect x="4" y="4" width="7" height="7" rx="1" />
-                <rect x="13" y="4" width="7" height="7" rx="1" />
-                <rect x="4" y="13" width="7" height="7" rx="1" />
-                <rect x="13" y="13" width="7" height="7" rx="1" />
-              </svg>
-            </button>
-            <button
-              class="layout-btn"
-              data-layout="9"
-              type="button"
-              title="Lưới 3×3"
-            >
-              <svg viewBox="0 0 24 24">
-                <rect x="3.5" y="3.5" width="5" height="5" rx=".8" />
-                <rect x="9.5" y="3.5" width="5" height="5" rx=".8" />
-                <rect x="15.5" y="3.5" width="5" height="5" rx=".8" />
-                <rect x="3.5" y="9.5" width="5" height="5" rx=".8" />
-                <rect x="9.5" y="9.5" width="5" height="5" rx=".8" />
-                <rect x="15.5" y="9.5" width="5" height="5" rx=".8" />
-                <rect x="3.5" y="15.5" width="5" height="5" rx=".8" />
-                <rect x="9.5" y="15.5" width="5" height="5" rx=".8" />
-                <rect x="15.5" y="15.5" width="5" height="5" rx=".8" />
-              </svg>
-            </button>
-          </div>
-        </div>
 
         <div id="alarm-banner" class="alarm-banner hidden">
           <span class="pulse-dot"></span>
@@ -248,8 +210,6 @@
         </section>
       </div>
     </div>
-
-    <div id="sidebar-backdrop" class="sidebar-backdrop hidden"></div>
 
     <div id="account-modal" class="modal hidden">
       <div class="modal-card">
