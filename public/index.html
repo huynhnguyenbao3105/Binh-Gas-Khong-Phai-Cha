@@ -161,13 +161,6 @@
           </div>
         </header>
 
-        <div id="alarm-banner" class="alarm-banner hidden">
-          <span class="pulse-dot"></span>
-          <strong>Cảnh báo gas</strong>
-          <span id="alarm-banner-text">Phát hiện bình gas</span>
-          <button type="button" id="btn-stop-banner">Tắt báo</button>
-        </div>
-
         <main id="view-live" class="view-live">
           <div id="camera-grid" class="video-grid layout-4"></div>
         </main>
@@ -308,6 +301,22 @@
           </div>
         </form>
       </div>
+    </div>
+
+    <div id="alarm-banner" class="alarm-banner hidden" role="alert" aria-live="assertive">
+      <div class="alarm-banner-body">
+        <span class="alarm-banner-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24">
+            <path d="M12 3.2 21.5 20H2.5L12 3.2Z" />
+            <path d="M12 10v4.5M12 17.2v.2" />
+          </svg>
+        </span>
+        <div class="alarm-banner-copy">
+          <strong>Cảnh báo gas</strong>
+          <span id="alarm-banner-text">Phát hiện bình gas</span>
+        </div>
+      </div>
+      <button type="button" id="btn-stop-banner">Tắt báo</button>
     </div>
 
     <audio id="siren-audio" loop preload="auto"></audio>

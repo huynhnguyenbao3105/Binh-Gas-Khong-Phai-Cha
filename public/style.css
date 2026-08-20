@@ -364,36 +364,101 @@ svg {
 }
 
 .alarm-banner {
+  position: fixed;
+  right: 22px;
+  bottom: 22px;
+  top: auto;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: min(360px, calc(100vw - var(--rail-w) - 44px));
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(26, 10, 10, 0.72);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 92, 92, 0.32);
+  box-shadow:
+    0 0 0 1px rgba(255, 92, 92, 0.08),
+    0 12px 32px rgba(0, 0, 0, 0.28);
+  color: #ffd0d0;
+  font-size: 13px;
+  animation: alarm-toast-in 0.28s ease;
+}
+
+.alarm-banner.hidden {
+  display: none;
+}
+
+.alarm-banner-body {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin: 0 22px 10px;
-  padding: 10px 14px;
-  border-radius: 10px;
-  background: rgba(255, 92, 92, 0.12);
-  border: 1px solid rgba(255, 92, 92, 0.28);
-  color: #ffd0d0;
-  font-size: 13px;
+  min-width: 0;
+  flex: 1;
 }
 
-.alarm-banner .pulse-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
+.alarm-banner-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.alarm-banner-copy strong {
+  color: #fff;
+  font-size: 14px;
+}
+
+.alarm-banner-copy span {
+  color: #ffc2c2;
+  line-height: 1.35;
+}
+
+.alarm-banner-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  color: #fff;
   background: var(--danger);
-  box-shadow: 0 0 0 0 rgba(255, 92, 92, 0.6);
   animation: pulse 1.2s infinite;
 }
 
+.alarm-banner-icon svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 .alarm-banner button {
-  margin-left: auto;
   border: 0;
   background: var(--danger);
   color: #fff;
   border-radius: 8px;
-  padding: 6px 12px;
+  padding: 7px 12px;
   font-size: 12px;
   font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+@keyframes alarm-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* —— Video grid —— */
@@ -1101,6 +1166,11 @@ svg {
 @media (max-width: 960px) {
   .shell {
     grid-template-columns: var(--rail-w) 1fr;
+  }
+  .alarm-banner {
+    right: 12px;
+    bottom: 12px;
+    width: min(360px, calc(100vw - var(--rail-w) - 24px));
   }
   .toolbar-date span {
     overflow: hidden;
